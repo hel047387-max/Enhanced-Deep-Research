@@ -11,6 +11,8 @@ async def checkpoint_context(path: str | Path) -> AsyncIterator[Any]:
     """Open and initialize one LangGraph SQLite checkpointer."""
 
     try:
+        import aiosqlite
+        from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
         from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
     except ImportError as exc:  # pragma: no cover - exercised only without extras
         raise RuntimeError(
@@ -20,6 +22,10 @@ async def checkpoint_context(path: str | Path) -> AsyncIterator[Any]:
 
     database_path = Path(path)
     database_path.parent.mkdir(parents=True, exist_ok=True)
-    async with AsyncSqliteSaver.from_conn_string(str(database_path)) as saver:
+    async with aiosqlite.connect(str(database_path)) as connection:
+        saver = AsyncSqliteSaver(
+            connection,
+            serde=JsonPlusSerializer(pickle_fallback=True),
+        )
         await saver.setup()
         yield saver
