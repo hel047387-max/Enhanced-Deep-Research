@@ -1,4 +1,4 @@
-import { readonly, shallowRef, type DeepReadonly, type Ref } from "vue";
+import { computed, shallowRef, type Ref } from "vue";
 import * as researchApi from "../api/research";
 import type { ResearchEventHandler } from "../api/research";
 import type {
@@ -16,7 +16,7 @@ export interface ResearchApiClient {
 }
 
 export interface ResearchStore {
-  state: DeepReadonly<Ref<ResearchUIState>>;
+  state: Readonly<Ref<ResearchUIState>>;
   start(query: string): Promise<void>;
   resume(answer: string): Promise<void>;
   cancel(): Promise<void>;
@@ -202,6 +202,7 @@ function localEvent(state: ResearchUIState, type: "run_cancelled" | "error", pay
 
 export function useResearchStore(api: ResearchApiClient = defaultApi): ResearchStore {
   const mutableState = shallowRef<ResearchUIState>(initialResearchState());
+  const state = computed(() => mutableState.value);
   let controller: AbortController | null = null;
   const receive: ResearchEventHandler = (event) => {
     mutableState.value = applyResearchEvent(mutableState.value, event);
@@ -258,5 +259,26 @@ export function useResearchStore(api: ResearchApiClient = defaultApi): ResearchS
     mutableState.value = stateFromSnapshot(await api.getSnapshot(threadId));
   }
 
-  return { state: readonly(mutableState), start, resume, cancel, restore };
+  return { state, start, resume, cancel, restore };
+}
+
+type TestActionOverrides = {
+  start?: (query: string) => unknown;
+  resume?: (answer: string) => unknown;
+  cancel?: () => unknown;
+  restore?: (threadId: string) => unknown;
+};
+
+export function createResearchStoreForTest(
+  actions: TestActionOverrides = {},
+  stateOverrides: Partial<ResearchUIState> = {},
+): ResearchStore {
+  const state = shallowRef<ResearchUIState>({ ...initialResearchState(), ...stateOverrides });
+  return {
+    state: computed(() => state.value),
+    start: async (query) => { await actions.start?.(query); },
+    resume: async (answer) => { await actions.resume?.(answer); },
+    cancel: async () => { await actions.cancel?.(); },
+    restore: async (threadId) => { await actions.restore?.(threadId); },
+  };
 }
