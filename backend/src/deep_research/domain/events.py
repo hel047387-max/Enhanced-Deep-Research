@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from enum import StrEnum
+from math import isfinite
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
@@ -31,8 +32,10 @@ class EventType(StrEnum):
 
 
 def _is_json_value(value: Any) -> bool:
-    if value is None or isinstance(value, (bool, int, float, str)):
+    if value is None or isinstance(value, (bool, int, str)):
         return True
+    if isinstance(value, float):
+        return isfinite(value)
     if isinstance(value, list):
         return all(_is_json_value(item) for item in value)
     if isinstance(value, dict):

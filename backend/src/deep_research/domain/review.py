@@ -1,6 +1,6 @@
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from deep_research.domain.plan import ResearchTask
 
@@ -46,3 +46,11 @@ class ReviewResult(BaseModel, frozen=True):
     missing_sections: list[str] = Field(default_factory=list)
     revision_instructions: list[str] = Field(default_factory=list)
     follow_up_tasks: list[ResearchTask] = Field(default_factory=list, max_length=1)
+
+    @model_validator(mode="after")
+    def validate_follow_up_task_semantics(self) -> "ReviewResult":
+        if self.verdict is ReviewVerdict.RESEARCH_GAP and len(self.follow_up_tasks) != 1:
+            raise ValueError("research_gap requires exactly one follow-up task")
+        if self.verdict is not ReviewVerdict.RESEARCH_GAP and self.follow_up_tasks:
+            raise ValueError("pass and revise verdicts cannot include follow-up tasks")
+        return self

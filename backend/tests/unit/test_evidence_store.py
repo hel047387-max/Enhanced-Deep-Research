@@ -24,6 +24,33 @@ def test_same_canonical_url_produces_same_source_id() -> None:
     assert first.source_id == second.source_id
 
 
+@pytest.mark.parametrize(
+    ("alias", "equivalent", "canonical"),
+    [
+        (
+            "https://éxample.com/path",
+            "https://xn--xample-9ua.com/path",
+            "https://xn--xample-9ua.com/path",
+        ),
+        ("https://example.com./path", "https://example.com/path", "https://example.com/path"),
+    ],
+)
+def test_host_aliases_have_one_canonical_url_and_source_id(
+    alias: str,
+    equivalent: str,
+    canonical: str,
+) -> None:
+    retrieved_at = datetime(2026, 8, 26, tzinfo=UTC)
+
+    first = build_source(alias, "Alias", "body", retrieved_at, SourceType.WEB)
+    second = build_source(equivalent, "Equivalent", "body", retrieved_at, SourceType.WEB)
+
+    assert canonicalize_url(alias) == canonical
+    assert canonicalize_url(equivalent) == canonical
+    assert first.source_id == second.source_id
+    assert str(first.canonical_url).rstrip("/") == canonical
+
+
 def test_evidence_id_is_stable_for_same_task_source_claim() -> None:
     first = build_evidence("task-1", "source-1", "A claim", "Exact excerpt", "Context", Relevance.HIGH, 1)
     second = build_evidence("task-1", "source-1", "A claim", "Exact excerpt", "Context", Relevance.HIGH, 1)
@@ -74,6 +101,13 @@ def test_source_hashes_body_without_storing_raw_body() -> None:
         "https://127.1/path",
         "https://2130706433/path",
         "https://0x7f000001/path",
+        "http://127。0。0。1/path",
+        "http://%31%32%37.0.0.1/path",
+        "https://user@example.com/path",
+        "https://user:password@example.com/path",
+        "https://0.0.0.0/path",
+        "https://169.254.1.1/path",
+        "https://224.0.0.1/path",
     ],
 )
 def test_canonicalize_url_rejects_unsafe_url_hosts_and_schemes(url: str) -> None:
@@ -81,15 +115,54 @@ def test_canonicalize_url_rejects_unsafe_url_hosts_and_schemes(url: str) -> None
         canonicalize_url(url)
 
 
-def test_source_validation_rejects_unsafe_url_even_when_constructed_directly() -> None:
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://localhost/path",
+        "http://127。0。0。1/path",
+        "http://%31%32%37.0.0.1/path",
+        "https://user@example.com/path",
+    ],
+)
+def test_source_validation_rejects_unsafe_url_even_when_constructed_directly(url: str) -> None:
     with pytest.raises(ValidationError):
         Source(
             source_id="src-1",
-            url="https://localhost/path",
-            canonical_url="https://localhost/path",
+            url=url,
+            canonical_url=url,
             title="A",
             domain="localhost",
             retrieved_at=datetime(2026, 8, 26, tzinfo=UTC),
             content_hash="hash",
             source_type=SourceType.WEB,
         )
+
+
+@pytest.mark.parametrize(
+    ("alias", "equivalent"),
+    [
+        ("https://éxample.com/path", "https://xn--xample-9ua.com/path"),
+        ("https://example.com./path", "https://example.com/path"),
+    ],
+)
+def test_source_direct_construction_normalizes_equivalent_authorities(
+    alias: str,
+    equivalent: str,
+) -> None:
+    def direct(url: str) -> Source:
+        return Source(
+            source_id="src-direct",
+            url=url,
+            canonical_url=url,
+            title="A",
+            domain="example.com",
+            retrieved_at=datetime(2026, 8, 26, tzinfo=UTC),
+            content_hash="hash",
+            source_type=SourceType.WEB,
+        )
+
+    first = direct(alias)
+    second = direct(equivalent)
+
+    assert str(first.url) == str(second.url)
+    assert str(first.canonical_url) == str(second.canonical_url)

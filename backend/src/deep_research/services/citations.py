@@ -3,6 +3,7 @@ from collections.abc import Mapping
 from pydantic import BaseModel
 
 from deep_research.domain.evidence import EvidenceItem, Source
+from deep_research.domain.plan import ResearchTask, TaskStatus
 from deep_research.domain.review import ReportDraft, ReportParagraph
 
 
@@ -37,6 +38,7 @@ def validate_draft(
     draft: ReportDraft,
     evidence: Mapping[str, EvidenceItem],
     sources: Mapping[str, Source],
+    tasks: Mapping[str, ResearchTask],
 ) -> list[CitationIssue]:
     issues: list[CitationIssue] = []
     for section_id, paragraph in _paragraphs(draft):
@@ -52,6 +54,25 @@ def validate_draft(
                     )
                 )
                 continue
+            task = tasks.get(item.task_id)
+            if task is None:
+                issues.append(
+                    CitationIssue(
+                        section_id=section_id,
+                        paragraph_id=paragraph.paragraph_id,
+                        evidence_id=evidence_id,
+                        message=f"Evidence {evidence_id} references unknown task ID: {item.task_id}",
+                    )
+                )
+            elif task.status is TaskStatus.FAILED:
+                issues.append(
+                    CitationIssue(
+                        section_id=section_id,
+                        paragraph_id=paragraph.paragraph_id,
+                        evidence_id=evidence_id,
+                        message=f"Evidence {evidence_id} belongs to failed task: {item.task_id}",
+                    )
+                )
             if item.source_id not in sources:
                 issues.append(
                     CitationIssue(
@@ -68,8 +89,9 @@ def render_report(
     draft: ReportDraft,
     evidence: Mapping[str, EvidenceItem],
     sources: Mapping[str, Source],
+    tasks: Mapping[str, ResearchTask],
 ) -> str:
-    issues = validate_draft(draft, evidence, sources)
+    issues = validate_draft(draft, evidence, sources, tasks)
     if issues:
         raise CitationValidationError(issues)
 

@@ -3,6 +3,18 @@ from pydantic import ValidationError
 
 from deep_research.config import ResearchBudgets, Settings
 
+BUDGET_BOUNDS = [
+    ("max_initial_tasks", 3, 5),
+    ("max_supervisor_tasks", 0, 2),
+    ("max_reviewer_tasks", 0, 1),
+    ("max_research_rounds", 1, 2),
+    ("max_queries_per_round", 1, 2),
+    ("max_concurrent_researchers", 1, 3),
+    ("max_total_search_queries", 1, 20),
+    ("max_sources_per_task", 1, 8),
+    ("max_evidence_per_task", 1, 20),
+]
+
 
 def test_default_budgets_match_the_approved_spec() -> None:
     budgets = ResearchBudgets()
@@ -20,6 +32,31 @@ def test_default_budgets_match_the_approved_spec() -> None:
 def test_client_cannot_construct_an_unbounded_budget() -> None:
     with pytest.raises(ValidationError):
         ResearchBudgets(max_total_search_queries=21)
+
+
+@pytest.mark.parametrize(("field", "minimum", "maximum"), BUDGET_BOUNDS)
+def test_settings_enforce_every_research_budget_bound_at_construction(
+    field: str,
+    minimum: int,
+    maximum: int,
+) -> None:
+    assert getattr(Settings(_env_file=None, **{field: maximum}), field) == maximum
+    for invalid in (minimum - 1, maximum + 1):
+        with pytest.raises(ValidationError):
+            Settings(_env_file=None, **{field: invalid})
+
+
+@pytest.mark.parametrize(("field", "_minimum", "maximum"), BUDGET_BOUNDS)
+def test_settings_reject_over_budget_environment_values_immediately(
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    _minimum: int,
+    maximum: int,
+) -> None:
+    monkeypatch.setenv(field.upper(), str(maximum + 1))
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
 
 
 def test_settings_allow_missing_provider_credentials(

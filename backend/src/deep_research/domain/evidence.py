@@ -3,7 +3,7 @@ from __future__ import annotations
 import ipaddress
 from datetime import datetime
 from enum import StrEnum
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit, urlunsplit
 
 from pydantic import AnyHttpUrl, BaseModel, Field, field_validator
 
@@ -53,8 +53,36 @@ def _parse_legacy_ipv4_literal(host: str) -> ipaddress.IPv4Address | None:
     return ipaddress.IPv4Address(packed)
 
 
-def validate_public_http_url(url: str) -> None:
-    """Validate the URL policy that applies before any network access."""
+_UNICODE_DOTS = str.maketrans({"\u3002": ".", "\uff0e": ".", "\uff61": "."})
+
+
+def _normalize_public_host(host: str) -> str:
+    decoded_host = unquote(host).translate(_UNICODE_DOTS).casefold().rstrip(".")
+    if not decoded_host:
+        raise ValueError("URL must include a host")
+
+    try:
+        address = ipaddress.ip_address(decoded_host)
+    except ValueError:
+        address = _parse_legacy_ipv4_literal(decoded_host)
+    if address is not None:
+        if not address.is_global or address.is_multicast:
+            raise ValueError("non-global literal IP hosts are not allowed")
+        return address.compressed
+
+    try:
+        normalized_host = decoded_host.encode("idna").decode("ascii").casefold().rstrip(".")
+    except UnicodeError as exc:
+        raise ValueError("invalid URL host") from exc
+    if not normalized_host:
+        raise ValueError("URL must include a host")
+    if normalized_host == "localhost" or normalized_host.endswith(".localhost"):
+        raise ValueError("localhost URLs are not allowed")
+    return normalized_host
+
+
+def validate_public_http_url(url: str) -> str:
+    """Normalize authority and validate the URL policy before network access."""
     try:
         parsed = urlsplit(url)
         host = parsed.hostname
@@ -66,21 +94,24 @@ def validate_public_http_url(url: str) -> None:
         raise ValueError("URL scheme must be HTTP or HTTPS")
     if not parsed.netloc or not host:
         raise ValueError("URL must include a host")
-
-    normalized_host = host.casefold().rstrip(".")
-    if normalized_host == "localhost" or normalized_host.endswith(".localhost"):
-        raise ValueError("localhost URLs are not allowed")
-
-    literal_host = host.rstrip(".")
-    try:
-        address = ipaddress.ip_address(literal_host)
-    except ValueError:
-        address = _parse_legacy_ipv4_literal(literal_host)
-    if address is not None and (address.is_loopback or address.is_private):
-        raise ValueError("loopback and private literal IP hosts are not allowed")
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError("URL userinfo is not allowed")
 
     if port is not None and not 1 <= port <= 65535:
         raise ValueError("URL port is out of range")
+
+    normalized_host = _normalize_public_host(host)
+    authority_host = f"[{normalized_host}]" if ":" in normalized_host else normalized_host
+    netloc = authority_host if port is None else f"{authority_host}:{port}"
+    return urlunsplit(
+        (
+            parsed.scheme.casefold(),
+            netloc,
+            parsed.path,
+            parsed.query,
+            parsed.fragment,
+        )
+    )
 
 
 class SourceType(StrEnum):
@@ -109,8 +140,7 @@ class Source(BaseModel, frozen=True):
     @field_validator("url", "canonical_url", mode="before")
     @classmethod
     def validate_url(cls, value: AnyHttpUrl | str) -> AnyHttpUrl | str:
-        validate_public_http_url(str(value))
-        return value
+        return validate_public_http_url(str(value))
 
 
 class EvidenceItem(BaseModel, frozen=True):

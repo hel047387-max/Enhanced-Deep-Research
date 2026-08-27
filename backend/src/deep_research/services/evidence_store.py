@@ -18,24 +18,18 @@ _TRACKING_PARAMETERS = {"gclid", "fbclid"}
 
 def canonicalize_url(url: str) -> str:
     """Return a deterministic public HTTP(S) URL representation."""
-    validate_public_http_url(url)
-    parsed = urlsplit(url)
+    normalized_url = validate_public_http_url(url)
+    parsed = urlsplit(normalized_url)
     scheme = parsed.scheme.casefold()
     host = parsed.hostname
     if host is None:  # pragma: no cover - validate_public_http_url catches this
         raise ValueError("URL must include a host")
 
-    host = host.casefold()
     if ":" in host:
         host = f"[{host}]"
     netloc = host
     if parsed.port is not None:
         netloc = f"{netloc}:{parsed.port}"
-    if parsed.username is not None:
-        userinfo = parsed.username
-        if parsed.password is not None:
-            userinfo = f"{userinfo}:{parsed.password}"
-        netloc = f"{userinfo}@{netloc}"
 
     path = parsed.path.rstrip("/")
     query_pairs = [
@@ -52,6 +46,11 @@ def _short_hash(value: str, prefix: str) -> str:
     return f"{prefix}{digest}"
 
 
+def source_id_from_canonical_url(canonical_url: str) -> str:
+    """Derive a stable source identifier from an already-canonical URL."""
+    return _short_hash(canonical_url, "src-")
+
+
 def build_source(
     url: str,
     title: str,
@@ -65,7 +64,7 @@ def build_source(
     if host is None:  # pragma: no cover - canonicalize_url validates this
         raise ValueError("URL must include a host")
     return Source(
-        source_id=_short_hash(canonical_url, "src-"),
+        source_id=source_id_from_canonical_url(canonical_url),
         url=url,
         canonical_url=canonical_url,
         title=title,
