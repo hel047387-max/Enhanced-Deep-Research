@@ -10,7 +10,12 @@ from deep_research.domain.plan import (
     ResearchPlan,
     ResearchTask,
 )
-from tests.fakes import ResearcherHarness, ScriptedStructuredModel, SupervisorHarness
+from tests.fakes import (
+    GraphHarness,
+    ResearcherHarness,
+    ScriptedStructuredModel,
+    SupervisorHarness,
+)
 
 
 @pytest.fixture
@@ -85,3 +90,8 @@ def researcher_factory() -> Callable[[list[GapAssessment], int], ResearcherHarne
 @pytest.fixture
 def supervisor_harness() -> SupervisorHarness:
     return SupervisorHarness()
+
+
+@pytest.fixture
+def graph_harness() -> GraphHarness:
+    return GraphHarness()

@@ -22,5 +22,6 @@ def gap_analysis_prompt(brief: ResearchBrief, task: ResearchTask) -> str:
         "missing_questions, evidence_issues, next_queries (at most two), "
         "should_continue, and reason. Continue only for a concrete missing completion "
         "criterion. Do not provide hidden reasoning. "
-        f"Research question: {brief.main_question}. Task: {task.objective}."
+        f"Research question: {brief.main_question}. Task ID: {task.task_id}. "
+        f"Task: {task.objective}."
     )

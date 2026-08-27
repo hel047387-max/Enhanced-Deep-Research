@@ -1,10 +1,20 @@
+from dataclasses import dataclass
+from typing import Protocol
+
+from langchain_core.messages import HumanMessage
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
-from langgraph.types import Send
+from langgraph.graph.state import CompiledStateGraph
+from langgraph.types import Send, interrupt
 
 from deep_research.config import ResearchBudgets
-from deep_research.graph.routing import may_research_again
+from deep_research.domain.errors import ResearchError
+from deep_research.graph.routing import may_research_again, route_review
 from deep_research.llm import StructuredModel
+from deep_research.nodes.clarify import clarify_request, write_research_brief
+from deep_research.nodes.finalizer import finalize_report
 from deep_research.nodes.gap_analyzer import assess_gap_node
+from deep_research.nodes.planner import plan_research
 from deep_research.nodes.researcher import (
     ResearcherInput,
     ResearcherOutput,
@@ -14,6 +24,7 @@ from deep_research.nodes.researcher import (
     extract_evidence_node,
     prepare_queries_node,
 )
+from deep_research.nodes.reviewer import review_report
 from deep_research.nodes.supervisor import (
     ResearcherRunner,
     SupervisorState,
@@ -21,7 +32,32 @@ from deep_research.nodes.supervisor import (
     prepare_dispatch_node,
     research_task_node,
 )
+from deep_research.nodes.writer import write_report
+from deep_research.services.citations import validate_draft
+from deep_research.state.models import ResearchState
 from deep_research.tools.search import SearchProvider
+
+
+class EventSink(Protocol):
+    async def emit(self, event_type: str, payload: dict[str, object]) -> None: ...
+
+
+class CancellationChecker(Protocol):
+    def raise_if_cancelled(self) -> None: ...
+
+
+@dataclass(frozen=True)
+class WorkflowDependencies:
+    clarifier_model: StructuredModel
+    planner_model: StructuredModel
+    evidence_model: StructuredModel
+    gap_model: StructuredModel
+    writer_model: StructuredModel
+    reviewer_model: StructuredModel
+    search_provider: SearchProvider
+    budgets: ResearchBudgets
+    event_sink: EventSink
+    cancellation_checker: CancellationChecker
 
 
 def build_researcher_graph(
@@ -112,3 +148,243 @@ def build_supervisor_graph(
     builder.add_edge("assess_coverage", "prepare_dispatch")
     builder.add_edge("finish", END)
     return builder.compile()
+
+
+def build_research_graph_builder(
+    deps: WorkflowDependencies,
+) -> StateGraph:
+    researcher = build_researcher_graph(
+        search_provider=deps.search_provider,
+        evidence_model=deps.evidence_model,
+        gap_model=deps.gap_model,
+        budgets=deps.budgets,
+    )
+    supervisor = build_supervisor_graph(
+        researcher_runner=researcher.ainvoke,
+        coverage_model=deps.gap_model,
+        budgets=deps.budgets,
+    )
+    builder = StateGraph(ResearchState)
+
+    async def clarify_node(state: ResearchState) -> dict[str, object]:
+        deps.cancellation_checker.raise_if_cancelled()
+        patch = await clarify_request(state, deps.clarifier_model)
+        if patch.get("interrupt_question"):
+            await deps.event_sink.emit(
+                "clarification_required",
+                {"question": patch["interrupt_question"]},
+            )
+        return patch
+
+    async def ask_clarification_node(state: ResearchState) -> dict[str, object]:
+        answer = interrupt({"question": state["interrupt_question"]})
+        return {
+            "messages": [HumanMessage(content=str(answer))],
+            "status": "running",
+        }
+
+    async def brief_node(state: ResearchState) -> dict[str, object]:
+        deps.cancellation_checker.raise_if_cancelled()
+        patch = await write_research_brief(state, deps.clarifier_model)
+        await deps.event_sink.emit("research_brief_created", {})
+        return patch
+
+    async def planner_node(state: ResearchState) -> dict[str, object]:
+        deps.cancellation_checker.raise_if_cancelled()
+        patch = await plan_research(state, deps.planner_model)
+        await deps.event_sink.emit("plan_created", {"task_count": len(patch["tasks"])})
+        return patch
+
+    async def supervisor_node(state: ResearchState) -> dict[str, object]:
+        deps.cancellation_checker.raise_if_cancelled()
+        result = await supervisor.ainvoke(
+            {
+                "research_brief": state["research_brief"],
+                "tasks": state.get("tasks", {}),
+                "sources": state.get("sources", {}),
+                "evidence": state.get("evidence", {}),
+                "gap_assessments": state.get("gap_assessments", {}),
+                "total_queries": state.get("total_queries", 0),
+                "coverage_checked": state.get("coverage_checked", False),
+                "supervisor_added_tasks": state.get("supervisor_added_tasks", 0),
+                "errors": state.get("errors", []),
+            }
+        )
+        await deps.event_sink.emit(
+            "coverage_assessed",
+            {"task_count": len(result.get("tasks", {}))},
+        )
+        return {
+            key: result[key]
+            for key in (
+                "tasks",
+                "sources",
+                "evidence",
+                "gap_assessments",
+                "total_queries",
+                "coverage_checked",
+                "supervisor_added_tasks",
+                "errors",
+            )
+            if key in result
+        }
+
+    async def no_evidence_node(_state: ResearchState) -> dict[str, object]:
+        return {
+            "status": "failed",
+            "errors": [
+                ResearchError(
+                    error_code="no_valid_evidence",
+                    stage="writing",
+                    message="No valid evidence was available; report generation stopped.",
+                )
+            ],
+        }
+
+    async def writer_node(state: ResearchState) -> dict[str, object]:
+        deps.cancellation_checker.raise_if_cancelled()
+        patch = await write_report(state, deps.writer_model)
+        await deps.event_sink.emit("draft_created", {})
+        return patch
+
+    async def validate_initial_draft_node(state: ResearchState) -> dict[str, object]:
+        issues = validate_draft(
+            state["draft_report"],
+            state.get("evidence", {}),
+            state.get("sources", {}),
+            state.get("tasks", {}),
+        )
+        if not issues:
+            return {}
+        return {
+            "status": "failed",
+            "errors": [
+                ResearchError(
+                    error_code="invalid_draft_citations",
+                    stage="writing",
+                    message="; ".join(issue.message for issue in issues),
+                )
+            ],
+        }
+
+    async def reviewer_node(state: ResearchState) -> dict[str, object]:
+        deps.cancellation_checker.raise_if_cancelled()
+        patch = await review_report(state, deps.reviewer_model)
+        await deps.event_sink.emit(
+            "review_completed",
+            {"verdict": patch["review_result"].verdict.value},
+        )
+        return patch
+
+    async def revise_node(state: ResearchState) -> dict[str, object]:
+        deps.cancellation_checker.raise_if_cancelled()
+        await deps.event_sink.emit("revision_started", {})
+        patch = await write_report(state, deps.writer_model)
+        return {**patch, "review_action_count": state.get("review_action_count", 0) + 1}
+
+    async def review_research_node(state: ResearchState) -> dict[str, object]:
+        deps.cancellation_checker.raise_if_cancelled()
+        review = state["review_result"]
+        if review is None or len(review.follow_up_tasks) != 1:
+            raise ValueError("research_gap requires exactly one follow-up task")
+        task = review.follow_up_tasks[0]
+        remaining = max(
+            0,
+            deps.budgets.max_total_search_queries - state.get("total_queries", 0),
+        )
+        grant = min(
+            remaining,
+            deps.budgets.max_research_rounds * deps.budgets.max_queries_per_round,
+        )
+        output = await researcher.ainvoke(
+            {
+                "task": task,
+                "research_brief": state["research_brief"],
+                "total_queries": state.get("total_queries", 0),
+                "query_budget": grant,
+            }
+        )
+        gap = output["gap_assessment"]
+        return {
+            "tasks": {output["updated_task"].task_id: output["updated_task"]},
+            "sources": output["sources"],
+            "evidence": output["evidence"],
+            "gap_assessments": {gap.task_id: gap},
+            "errors": output["errors"],
+            "total_queries": output["queries_used"],
+            "review_action_count": state.get("review_action_count", 0) + 1,
+        }
+
+    async def rewrite_after_research_node(state: ResearchState) -> dict[str, object]:
+        deps.cancellation_checker.raise_if_cancelled()
+        await deps.event_sink.emit("revision_started", {"after_research": True})
+        return await write_report(state, deps.writer_model)
+
+    async def finalizer_node(state: ResearchState) -> dict[str, object]:
+        deps.cancellation_checker.raise_if_cancelled()
+        patch = await finalize_report(state)
+        await deps.event_sink.emit("report_finalized", {})
+        return patch
+
+    builder.add_node("clarify", clarify_node)
+    builder.add_node("ask_clarification", ask_clarification_node)
+    builder.add_node("brief", brief_node)
+    builder.add_node("planner", planner_node)
+    builder.add_node("supervisor", supervisor_node)
+    builder.add_node("no_evidence", no_evidence_node)
+    builder.add_node("writer", writer_node)
+    builder.add_node("validate_initial_draft", validate_initial_draft_node)
+    builder.add_node("reviewer", reviewer_node)
+    builder.add_node("revise", revise_node)
+    builder.add_node("review_research", review_research_node)
+    builder.add_node("rewrite_after_research", rewrite_after_research_node)
+    builder.add_node("finalizer", finalizer_node)
+    builder.add_edge(START, "clarify")
+    builder.add_conditional_edges(
+        "clarify",
+        lambda state: "ask" if state.get("interrupt_question") else "brief",
+        {"ask": "ask_clarification", "brief": "brief"},
+    )
+    builder.add_edge("ask_clarification", "brief")
+    builder.add_edge("brief", "planner")
+    builder.add_edge("planner", "supervisor")
+    builder.add_conditional_edges(
+        "supervisor",
+        lambda state: "write" if state.get("evidence") else "fail",
+        {"write": "writer", "fail": "no_evidence"},
+    )
+    builder.add_edge("no_evidence", END)
+    builder.add_edge("writer", "validate_initial_draft")
+    builder.add_conditional_edges(
+        "validate_initial_draft",
+        lambda state: "fail" if state.get("status") == "failed" else "review",
+        {"fail": END, "review": "reviewer"},
+    )
+
+    def review_route(state: ResearchState) -> str:
+        review = state["review_result"]
+        if review is None:
+            return "finalize"
+        return route_review(review.verdict, state.get("review_action_count", 0))
+
+    builder.add_conditional_edges(
+        "reviewer",
+        review_route,
+        {
+            "finalize": "finalizer",
+            "revise": "revise",
+            "review_research": "review_research",
+        },
+    )
+    builder.add_edge("revise", "finalizer")
+    builder.add_edge("review_research", "rewrite_after_research")
+    builder.add_edge("rewrite_after_research", "finalizer")
+    builder.add_edge("finalizer", END)
+    return builder
+
+
+def build_research_graph(
+    deps: WorkflowDependencies,
+    checkpointer: BaseCheckpointSaver | None = None,
+) -> CompiledStateGraph:
+    return build_research_graph_builder(deps).compile(checkpointer=checkpointer)
