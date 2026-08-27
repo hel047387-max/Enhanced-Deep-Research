@@ -70,6 +70,10 @@ def test_source_hashes_body_without_storing_raw_body() -> None:
         "https://192.168.1.5/path",
         "https://[::1]/path",
         "https://[fd00::1]/path",
+        "https://0177.0.0.1/path",
+        "https://127.1/path",
+        "https://2130706433/path",
+        "https://0x7f000001/path",
     ],
 )
 def test_canonicalize_url_rejects_unsafe_url_hosts_and_schemes(url: str) -> None:
