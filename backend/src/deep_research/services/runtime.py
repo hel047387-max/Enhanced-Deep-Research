@@ -244,6 +244,8 @@ class ResearchRuntime:
         token: Token[_ExecutionIdentity | None] = _CURRENT_EXECUTION.set(
             _ExecutionIdentity(run_id, thread_id)
         )
+        terminal_status: RunStatus | None = None
+        last_error: str | None = None
         try:
             await self._run_store.update_status(run_id, RunStatus.RUNNING)
             await self._publisher.publish(
@@ -262,7 +264,7 @@ class ResearchRuntime:
                 status = RunStatus.FAILED
             else:
                 status = RunStatus.COMPLETED
-            await self._run_store.update_status(run_id, status)
+            terminal_status = status
             if status is RunStatus.FAILED:
                 errors = result.get("errors", [])
                 error = errors[-1] if errors else ResearchError(
@@ -283,7 +285,7 @@ class ResearchRuntime:
                 {"status": status.value},
             )
         except ResearchCancelled:
-            await self._run_store.update_status(run_id, RunStatus.CANCELLED)
+            terminal_status = RunStatus.CANCELLED
             await self._publisher.publish(
                 EventType.RUN_CANCELLED,
                 run_id,
@@ -297,7 +299,7 @@ class ResearchRuntime:
                 {"status": RunStatus.CANCELLED.value},
             )
         except asyncio.CancelledError:
-            await self._run_store.update_status(run_id, RunStatus.CANCELLED)
+            terminal_status = RunStatus.CANCELLED
             raise
         except Exception as exc:  # noqa: BLE001 - serialize one stable public error
             if _is_checkpoint_failure(exc):
@@ -313,11 +315,8 @@ class ResearchRuntime:
                     stage="runtime",
                     message="Research execution failed.",
                 )
-            await self._run_store.update_status(
-                run_id,
-                RunStatus.FAILED,
-                last_error=error.message,
-            )
+            terminal_status = RunStatus.FAILED
+            last_error = error.message
             await self._publisher.publish(
                 EventType.ERROR,
                 run_id,
@@ -332,8 +331,16 @@ class ResearchRuntime:
             )
         finally:
             _CURRENT_EXECUTION.reset(token)
-            await self._publisher.close(run_id)
             self._streams.pop(run_id, None)
+            try:
+                if terminal_status is not None:
+                    await self._run_store.update_status(
+                        run_id,
+                        terminal_status,
+                        last_error=last_error,
+                    )
+            finally:
+                await self._publisher.close(run_id)
 
     @staticmethod
     def _config(thread_id: str) -> dict[str, object]:
