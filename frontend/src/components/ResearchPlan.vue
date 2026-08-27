@@ -18,6 +18,10 @@ const orderedTasks = computed(() => Object.values(props.tasks));
       <div><dt>Scope</dt><dd>{{ brief.scope }}</dd></div>
       <div v-if="brief.timeRange"><dt>Time range</dt><dd>{{ brief.timeRange }}</dd></div>
       <div v-if="brief.comparisonDimensions.length"><dt>Compare</dt><dd>{{ brief.comparisonDimensions.join(", ") }}</dd></div>
+      <div v-if="brief.expectedOutput"><dt>Output</dt><dd>{{ brief.expectedOutput }}</dd></div>
+      <div v-if="brief.sourcePreferences.length"><dt>Preferred sources</dt><dd>{{ brief.sourcePreferences.join(", ") }}</dd></div>
+      <div v-if="brief.assumptions.length"><dt>Assumptions</dt><dd>{{ brief.assumptions.join(", ") }}</dd></div>
+      <div v-if="brief.exclusions.length"><dt>Exclusions</dt><dd>{{ brief.exclusions.join(", ") }}</dd></div>
     </dl>
     <ol v-if="orderedTasks.length" class="plan-list">
       <li v-for="task in orderedTasks" :key="task.taskId">

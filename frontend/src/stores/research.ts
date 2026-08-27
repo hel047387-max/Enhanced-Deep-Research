@@ -232,7 +232,8 @@ export function useResearchStore(api: ResearchApiClient = defaultApi): ResearchS
   }
 
   async function start(query: string): Promise<void> {
-    mutableState.value = initialResearchState();
+    if (controller !== null) return;
+    mutableState.value = { ...initialResearchState(), status: "running" };
     await runStream((signal) => api.startResearch(query, receive, signal));
   }
 

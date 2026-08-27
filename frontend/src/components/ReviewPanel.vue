@@ -29,5 +29,13 @@ const issueGroups = computed(() => props.review ? [
     <div v-if="review.revisionInstructions.length" class="review-group">
       <h3>Selected repair</h3><ul><li v-for="instruction in review.revisionInstructions" :key="instruction">{{ instruction }}</li></ul>
     </div>
+    <div v-if="review.followUpTasks.length" class="review-group">
+      <h3>Follow-up research</h3>
+      <article v-for="task in review.followUpTasks" :key="task.taskId">
+        <h4>{{ task.title }}</h4>
+        <p>{{ task.objective }}</p>
+        <span class="status-chip" :data-status="task.status">{{ task.status }}</span>
+      </article>
+    </div>
   </section>
 </template>
