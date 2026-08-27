@@ -33,6 +33,8 @@ async def test_cancel_endpoint_is_idempotent(async_client, running_thread_id) ->
 
     assert first.status_code == 202
     assert second.status_code == 202
+    snapshot = await async_client.get(f"/api/v1/research/{running_thread_id}")
+    assert snapshot.json()["status"] == "cancelled"
 
 
 @pytest.mark.asyncio

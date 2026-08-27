@@ -121,6 +121,17 @@ def serialize_error(error: ResearchError) -> dict[str, object]:
     return error.model_dump(mode="json")
 
 
+def _is_checkpoint_failure(error: Exception) -> bool:
+    if not isinstance(error, OSError):
+        return False
+    traceback = error.__traceback__
+    while traceback is not None:
+        if traceback.tb_frame.f_code.co_name in {"aput", "aput_writes"}:
+            return True
+        traceback = traceback.tb_next
+    return False
+
+
 class ResearchRuntime:
     """Single execution adapter shared by initial and resumed research runs."""
 
@@ -278,12 +289,20 @@ class ResearchRuntime:
         except asyncio.CancelledError:
             await self._run_store.update_status(run_id, RunStatus.CANCELLED)
             raise
-        except Exception:  # noqa: BLE001 - serialize one stable public error
-            error = ResearchError(
-                error_code="research_execution_failed",
-                stage="runtime",
-                message="Research execution failed.",
-            )
+        except Exception as exc:  # noqa: BLE001 - serialize one stable public error
+            if _is_checkpoint_failure(exc):
+                error = ResearchError(
+                    error_code="checkpoint_failed",
+                    stage="checkpoint",
+                    message="Research checkpoint persistence failed.",
+                    retryable=False,
+                )
+            else:
+                error = ResearchError(
+                    error_code="research_execution_failed",
+                    stage="runtime",
+                    message="Research execution failed.",
+                )
             await self._run_store.update_status(
                 run_id,
                 RunStatus.FAILED,

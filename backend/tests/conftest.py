@@ -1,10 +1,12 @@
 import asyncio
 from collections.abc import Callable
+from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from pydantic import BaseModel
 
 from deep_research.api.main import create_app
@@ -153,6 +155,63 @@ async def runtime_harness(tmp_path: Path):
     publisher = EventPublisher()
     cancellation = CancellationRegistry()
     async with checkpoint_context(database) as checkpointer:
+        graph = build_research_graph(
+            runtime_dependencies(publisher, cancellation),
+            checkpointer=checkpointer,
+        )
+        runtime = ResearchRuntime(graph, store, publisher, cancellation)
+        harness = RuntimeHarness(runtime, store)
+        try:
+            yield harness
+        finally:
+            await runtime.close()
+
+
+@pytest.fixture
+async def shared_database_runtime_factory(tmp_path: Path):
+    database = tmp_path / "shared-research.sqlite"
+    stack = AsyncExitStack()
+    runtimes: list[ResearchRuntime] = []
+
+    async def create() -> RuntimeHarness:
+        store = RunStore(database)
+        await store.initialize()
+        publisher = EventPublisher()
+        cancellation = CancellationRegistry()
+        checkpointer = await stack.enter_async_context(checkpoint_context(database))
+        graph = build_research_graph(
+            runtime_dependencies(publisher, cancellation),
+            checkpointer=checkpointer,
+        )
+        runtime = ResearchRuntime(graph, store, publisher, cancellation)
+        runtimes.append(runtime)
+        return RuntimeHarness(runtime, store)
+
+    try:
+        yield create
+    finally:
+        for runtime in reversed(runtimes):
+            await runtime.close()
+        await stack.aclose()
+
+
+class FailingAsyncSqliteSaver(AsyncSqliteSaver):
+    async def aput(self, *_args, **_kwargs):
+        raise OSError("checkpoint unavailable api_key=CHECKPOINT_SECRET")
+
+    async def aput_writes(self, *_args, **_kwargs):
+        raise OSError("checkpoint unavailable api_key=CHECKPOINT_SECRET")
+
+
+@pytest.fixture
+async def runtime_with_failing_checkpointer(tmp_path: Path):
+    database = tmp_path / "failing-research.sqlite"
+    store = RunStore(database)
+    await store.initialize()
+    publisher = EventPublisher()
+    cancellation = CancellationRegistry()
+    async with checkpoint_context(database) as saver:
+        checkpointer = FailingAsyncSqliteSaver(saver.conn, serde=saver.serde)
         graph = build_research_graph(
             runtime_dependencies(publisher, cancellation),
             checkpointer=checkpointer,

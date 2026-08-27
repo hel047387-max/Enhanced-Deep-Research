@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from deep_research.domain.events import EventType
@@ -51,3 +53,60 @@ async def test_snapshot_reads_committed_graph_projection(runtime_harness) -> Non
     assert snapshot.status is RunStatus.COMPLETED
     assert snapshot.report is not None
     assert snapshot.tasks
+
+
+@pytest.mark.asyncio
+async def test_new_runtime_resumes_waiting_checkpoint(
+    shared_database_runtime_factory,
+) -> None:
+    first = await shared_database_runtime_factory()
+    handle = await first.runtime.start("Ambiguous topic")
+    await first.wait_until(handle.run_id, RunStatus.WAITING_FOR_USER)
+
+    second = await shared_database_runtime_factory()
+    resumed = await second.runtime.resume(
+        handle.thread_id,
+        "Scope is the EU market in 2025",
+    )
+    await second.wait_until(resumed.run_id, RunStatus.COMPLETED)
+    snapshot = await second.runtime.snapshot(handle.thread_id)
+
+    assert snapshot.status is RunStatus.COMPLETED
+    assert resumed.thread_id == handle.thread_id
+    assert resumed.run_id != handle.run_id
+
+
+@pytest.mark.asyncio
+async def test_new_runtime_does_not_auto_restart_running_metadata(
+    shared_database_runtime_factory,
+) -> None:
+    first = await shared_database_runtime_factory()
+    await first.store.create_run("run-abandoned", "thread-abandoned")
+    await first.store.update_status("run-abandoned", RunStatus.RUNNING)
+
+    second = await shared_database_runtime_factory()
+    snapshot = await second.runtime.snapshot("thread-abandoned")
+
+    assert snapshot.run_id == "run-abandoned"
+    assert snapshot.status is RunStatus.RUNNING
+    assert snapshot.tasks == {}
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_failure_is_fatal_and_sanitized(
+    runtime_with_failing_checkpointer,
+) -> None:
+    handle = await runtime_with_failing_checkpointer.runtime.start(
+        "A complete question with api_key=TOP_SECRET"
+    )
+    events = [event async for event in handle.events]
+    metadata = await runtime_with_failing_checkpointer.wait_until(
+        handle.run_id,
+        RunStatus.FAILED,
+    )
+    terminal = next(event for event in events if event.type is EventType.ERROR)
+
+    assert terminal.payload["stage"] == "checkpoint"
+    assert terminal.payload["retryable"] is False
+    assert "api_key" not in json.dumps(terminal.payload).lower()
+    assert metadata.last_error == "Research checkpoint persistence failed."
