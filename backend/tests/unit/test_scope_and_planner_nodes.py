@@ -1,5 +1,6 @@
 import pytest
 
+from deep_research.config import ResearchBudgets
 from deep_research.nodes.clarify import clarify_request, write_research_brief
 from deep_research.nodes.planner import plan_research
 from tests.fakes import ScriptedStructuredModel
@@ -84,3 +85,24 @@ async def test_planner_rejects_too_few_tasks(brief, model_factory) -> None:
 
     with pytest.raises(ValueError):
         await plan_research({"research_brief": brief}, model_factory(invalid))
+
+
+@pytest.mark.asyncio
+async def test_planner_truncates_valid_plan_to_configured_initial_task_budget(
+    brief, three_task_plan, model_factory
+) -> None:
+    five_tasks = [
+        three_task_plan.tasks[index % 3].model_copy(
+            update={"task_id": f"task-{index + 1}"}
+        )
+        for index in range(5)
+    ]
+    plan = three_task_plan.model_copy(update={"tasks": five_tasks})
+
+    result = await plan_research(
+        {"research_brief": brief},
+        model_factory(plan),
+        budgets=ResearchBudgets(max_initial_tasks=3),
+    )
+
+    assert list(result["tasks"]) == ["task-1", "task-2", "task-3"]

@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Protocol
 
 from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -20,9 +19,8 @@ from deep_research.nodes.researcher import (
     ResearcherOutput,
     ResearcherState,
     complete_task_node,
-    execute_search_node,
-    extract_evidence_node,
     prepare_queries_node,
+    research_round_node,
 )
 from deep_research.nodes.reviewer import review_report
 from deep_research.nodes.supervisor import (
@@ -33,17 +31,10 @@ from deep_research.nodes.supervisor import (
     research_task_node,
 )
 from deep_research.nodes.writer import write_report
+from deep_research.runtime import CancellationChecker, EventSink
 from deep_research.services.citations import validate_draft
 from deep_research.state.models import ResearchState
 from deep_research.tools.search import SearchProvider
-
-
-class EventSink(Protocol):
-    async def emit(self, event_type: str, payload: dict[str, object]) -> None: ...
-
-
-class CancellationChecker(Protocol):
-    def raise_if_cancelled(self) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -65,17 +56,30 @@ def build_researcher_graph(
     evidence_model: StructuredModel,
     gap_model: StructuredModel,
     budgets: ResearchBudgets,
+    event_sink: EventSink,
+    cancellation_checker: CancellationChecker,
 ):
     builder = StateGraph(
         ResearcherState,
         input_schema=ResearcherInput,
         output_schema=ResearcherOutput,
     )
-    builder.add_node("prepare_queries", prepare_queries_node(budgets))
-    builder.add_node("execute_search", execute_search_node(search_provider))
-    builder.add_node("extract_evidence", extract_evidence_node(evidence_model, budgets))
-    builder.add_node("assess_gap", assess_gap_node(gap_model))
-    builder.add_node("complete_task", complete_task_node)
+    builder.add_node("prepare_queries", prepare_queries_node(budgets, event_sink))
+    builder.add_node(
+        "research_round",
+        research_round_node(
+            search_provider,
+            evidence_model,
+            budgets,
+            event_sink,
+            cancellation_checker,
+        ),
+    )
+    builder.add_node(
+        "assess_gap",
+        assess_gap_node(gap_model, event_sink, cancellation_checker),
+    )
+    builder.add_node("complete_task", complete_task_node(event_sink))
     builder.add_edge(START, "prepare_queries")
 
     def after_prepare(state: ResearcherState) -> str:
@@ -84,12 +88,17 @@ def build_researcher_graph(
     builder.add_conditional_edges(
         "prepare_queries",
         after_prepare,
-        {"search": "execute_search", "complete": "complete_task"},
+        {"search": "research_round", "complete": "complete_task"},
     )
-    builder.add_edge("execute_search", "extract_evidence")
-    builder.add_edge("extract_evidence", "assess_gap")
+    builder.add_conditional_edges(
+        "research_round",
+        lambda state: "done" if state.get("failed", False) else "gap",
+        {"done": "complete_task", "gap": "assess_gap"},
+    )
 
     def route_researcher(state: ResearcherState) -> str:
+        if state.get("failed", False):
+            return "done"
         can_continue = may_research_again(
             state["gap_assessment"],
             state.get("current_round", 0),
@@ -100,6 +109,8 @@ def build_researcher_graph(
             "query_budget", budgets.max_total_search_queries
         ):
             can_continue = False
+        if can_continue:
+            cancellation_checker.raise_if_cancelled()
         return "search" if can_continue else "done"
 
     builder.add_conditional_edges(
@@ -158,6 +169,8 @@ def build_research_graph_builder(
         evidence_model=deps.evidence_model,
         gap_model=deps.gap_model,
         budgets=deps.budgets,
+        event_sink=deps.event_sink,
+        cancellation_checker=deps.cancellation_checker,
     )
     supervisor = build_supervisor_graph(
         researcher_runner=researcher.ainvoke,
@@ -180,6 +193,7 @@ def build_research_graph_builder(
         answer = interrupt({"question": state["interrupt_question"]})
         return {
             "messages": [HumanMessage(content=str(answer))],
+            "interrupt_question": None,
             "status": "running",
         }
 
@@ -191,7 +205,7 @@ def build_research_graph_builder(
 
     async def planner_node(state: ResearchState) -> dict[str, object]:
         deps.cancellation_checker.raise_if_cancelled()
-        patch = await plan_research(state, deps.planner_model)
+        patch = await plan_research(state, deps.planner_model, budgets=deps.budgets)
         await deps.event_sink.emit("plan_created", {"task_count": len(patch["tasks"])})
         return patch
 
@@ -269,12 +283,57 @@ def build_research_graph_builder(
 
     async def reviewer_node(state: ResearchState) -> dict[str, object]:
         deps.cancellation_checker.raise_if_cancelled()
-        patch = await review_report(state, deps.reviewer_model)
+        try:
+            patch = await review_report(state, deps.reviewer_model)
+        except Exception:  # noqa: BLE001 - degrade with a stable public result
+            draft = state["draft_report"]
+            if draft is None:
+                raise ValueError("reviewer fallback requires a draft") from None
+            limitation = (
+                "Review incomplete: reviewer assessment failed; deterministic citation "
+                "validation was used."
+            )
+            await deps.event_sink.emit(
+                "review_completed",
+                {"status": "incomplete"},
+            )
+            return {
+                "draft_report": draft.model_copy(
+                    update={"limitations": [*draft.limitations, limitation]}
+                ),
+                "review_result": None,
+                "review_incomplete": True,
+                "errors": [
+                    ResearchError(
+                        error_code="review_failed",
+                        stage="review",
+                        message=(
+                            "Reviewer assessment failed; deterministic finalization "
+                            "continued."
+                        ),
+                        retryable=True,
+                    )
+                ],
+            }
         await deps.event_sink.emit(
             "review_completed",
             {"verdict": patch["review_result"].verdict.value},
         )
         return patch
+
+    async def skip_reviewer_research_node(state: ResearchState) -> dict[str, object]:
+        draft = state["draft_report"]
+        if draft is None:
+            raise ValueError("reviewer budget fallback requires a draft")
+        limitation = (
+            "Reviewer research was skipped because the configured Reviewer task budget "
+            "is zero."
+        )
+        return {
+            "draft_report": draft.model_copy(
+                update={"limitations": [*draft.limitations, limitation]}
+            )
+        }
 
     async def revise_node(state: ResearchState) -> dict[str, object]:
         deps.cancellation_checker.raise_if_cancelled()
@@ -284,6 +343,8 @@ def build_research_graph_builder(
 
     async def review_research_node(state: ResearchState) -> dict[str, object]:
         deps.cancellation_checker.raise_if_cancelled()
+        if deps.budgets.max_reviewer_tasks < 1:
+            raise ValueError("reviewer task budget is exhausted")
         review = state["review_result"]
         if review is None or len(review.follow_up_tasks) != 1:
             raise ValueError("research_gap requires exactly one follow-up task")
@@ -335,6 +396,7 @@ def build_research_graph_builder(
     builder.add_node("writer", writer_node)
     builder.add_node("validate_initial_draft", validate_initial_draft_node)
     builder.add_node("reviewer", reviewer_node)
+    builder.add_node("skip_reviewer_research", skip_reviewer_research_node)
     builder.add_node("revise", revise_node)
     builder.add_node("review_research", review_research_node)
     builder.add_node("rewrite_after_research", rewrite_after_research_node)
@@ -362,9 +424,14 @@ def build_research_graph_builder(
     )
 
     def review_route(state: ResearchState) -> str:
-        review = state["review_result"]
+        review = state.get("review_result")
         if review is None:
             return "finalize"
+        if (
+            review.verdict.value == "research_gap"
+            and deps.budgets.max_reviewer_tasks < 1
+        ):
+            return "skip_research"
         return route_review(review.verdict, state.get("review_action_count", 0))
 
     builder.add_conditional_edges(
@@ -374,8 +441,10 @@ def build_research_graph_builder(
             "finalize": "finalizer",
             "revise": "revise",
             "review_research": "review_research",
+            "skip_research": "skip_reviewer_research",
         },
     )
+    builder.add_edge("skip_reviewer_research", "finalizer")
     builder.add_edge("revise", "finalizer")
     builder.add_edge("review_research", "rewrite_after_research")
     builder.add_edge("rewrite_after_research", "finalizer")

@@ -16,8 +16,9 @@ from deep_research.domain.plan import (
 )
 from deep_research.llm import StructuredModel
 from deep_research.prompts.research import evidence_extraction_prompt
+from deep_research.runtime import CancellationChecker, EventSink
 from deep_research.services.evidence_store import build_evidence, build_source
-from deep_research.tools.search import SearchHit, SearchProvider
+from deep_research.tools.search import SearchProvider
 
 
 class ExtractedEvidence(BaseModel, frozen=True):
@@ -40,7 +41,6 @@ class ResearcherInput(TypedDict):
 
 class ResearcherState(ResearcherInput, total=False):
     queries: list[str]
-    raw_results: list[SearchHit]
     sources: dict[str, Source]
     evidence: dict[str, EvidenceItem]
     gap_assessment: GapAssessment
@@ -48,6 +48,9 @@ class ResearcherState(ResearcherInput, total=False):
     queries_used: int
     errors: list[ResearchError]
     budget_exhausted: bool
+    failed: bool
+    failure_code: str
+    task_started_emitted: bool
 
 
 class ResearcherOutput(TypedDict):
@@ -59,8 +62,63 @@ class ResearcherOutput(TypedDict):
     queries_used: int
 
 
-def prepare_queries_node(budgets: ResearchBudgets):
+_PUBLIC_FAILURES: dict[str, tuple[str, bool]] = {
+    "search_failed": ("Search provider request failed.", True),
+    "source_normalization_failed": ("A search result could not be normalized safely.", False),
+    "evidence_extraction_failed": ("Evidence extraction failed.", True),
+    "gap_analysis_failed": ("Gap assessment failed.", True),
+}
+
+
+def researcher_failure_patch(
+    state: ResearcherState,
+    error_code: str,
+    *,
+    current_round: int | None = None,
+    queries_used: int | None = None,
+) -> dict[str, object]:
+    message, retryable = _PUBLIC_FAILURES[error_code]
+    task = state["task"]
+    return {
+        "failed": True,
+        "failure_code": error_code,
+        "current_round": (
+            state.get("current_round", 0)
+            if current_round is None
+            else current_round
+        ),
+        "queries_used": (
+            state.get("queries_used", 0) if queries_used is None else queries_used
+        ),
+        "sources": {},
+        "evidence": {},
+        "gap_assessment": GapAssessment(
+            task_id=task.task_id,
+            coverage=CoverageLevel.INSUFFICIENT,
+            missing_questions=task.completion_criteria,
+            evidence_issues=[message],
+            should_continue=False,
+            reason=message,
+        ),
+        "errors": [
+            *state.get("errors", []),
+            ResearchError(
+                error_code=error_code,
+                stage="research",
+                message=message,
+                task_id=task.task_id,
+                retryable=retryable,
+            ),
+        ],
+    }
+
+
+def prepare_queries_node(budgets: ResearchBudgets, event_sink: EventSink):
     async def prepare_queries(state: ResearcherState) -> dict[str, object]:
+        patch: dict[str, object] = {}
+        if not state.get("task_started_emitted", False):
+            await event_sink.emit("task_started", {"task_id": state["task"].task_id})
+            patch["task_started_emitted"] = True
         current_round = state.get("current_round", 0)
         used = state.get("queries_used", 0)
         remaining_global = max(
@@ -79,74 +137,120 @@ def prepare_queries_node(budgets: ResearchBudgets):
             remaining_global,
             remaining_reserved,
         )
-        return {
-            "queries": candidates[:allowed],
-            "raw_results": [],
-            "budget_exhausted": allowed == 0,
-        }
+        patch.update(
+            {
+                "queries": candidates[:allowed],
+                "budget_exhausted": allowed == 0,
+            }
+        )
+        return patch
 
     return prepare_queries
 
 
-def execute_search_node(search_provider: SearchProvider):
-    async def execute_search(state: ResearcherState) -> dict[str, object]:
-        results: list[SearchHit] = []
-        errors: list[ResearchError] = []
-        for query in state.get("queries", []):
-            try:
-                results.extend(await search_provider.search(query, max_results=8))
-            except Exception as exc:  # noqa: BLE001 - sanitize provider failures into state
-                errors.append(
-                    ResearchError(
-                        error_code="search_failed",
-                        stage="research",
-                        message=str(exc),
-                        task_id=state["task"].task_id,
-                        retryable=True,
-                    )
-                )
-        query_count = len(state.get("queries", []))
-        return {
-            "raw_results": results,
-            "current_round": state.get("current_round", 0) + (1 if query_count else 0),
-            "queries_used": state.get("queries_used", 0) + query_count,
-            "errors": [*state.get("errors", []), *errors],
-        }
-
-    return execute_search
-
-
-def extract_evidence_node(
+def research_round_node(
+    search_provider: SearchProvider,
     evidence_model: StructuredModel,
     budgets: ResearchBudgets,
+    event_sink: EventSink,
+    cancellation_checker: CancellationChecker,
 ):
-    async def extract_evidence(state: ResearcherState) -> dict[str, object]:
-        sources = dict(state.get("sources", {}))
-        evidence = dict(state.get("evidence", {}))
+    async def research_round(state: ResearcherState) -> dict[str, object]:
         task = state["task"]
         brief = state["research_brief"]
-        round_number = state.get("current_round", 1)
-        for hit in state.get("raw_results", []):
+        queries = state.get("queries", [])
+        round_number = state.get("current_round", 0) + 1
+        attempts = 0
+        hits = []
+        await event_sink.emit(
+            "search_started",
+            {
+                "task_id": task.task_id,
+                "round": round_number,
+                "query_count": len(queries),
+            },
+        )
+        for query in queries:
+            cancellation_checker.raise_if_cancelled()
+            attempts += 1
+            try:
+                hits.extend(
+                    await search_provider.search(
+                        query,
+                        max_results=budgets.max_sources_per_task,
+                    )
+                )
+            except Exception:  # noqa: BLE001 - converted to a stable public error
+                await event_sink.emit(
+                    "search_completed",
+                    {
+                        "task_id": task.task_id,
+                        "round": round_number,
+                        "query_count": attempts,
+                        "result_count": 0,
+                        "status": "failed",
+                    },
+                )
+                return researcher_failure_patch(
+                    state,
+                    "search_failed",
+                    current_round=round_number,
+                    queries_used=state.get("queries_used", 0) + attempts,
+                )
+        await event_sink.emit(
+            "search_completed",
+            {
+                "task_id": task.task_id,
+                "round": round_number,
+                "query_count": attempts,
+                "result_count": len(hits),
+                "status": "completed",
+            },
+        )
+
+        sources = dict(state.get("sources", {}))
+        evidence = dict(state.get("evidence", {}))
+        added_ids: list[str] = []
+        for hit in hits:
             if len(sources) >= budgets.max_sources_per_task:
                 break
             body = hit.raw_content or hit.content
-            source = build_source(
-                url=str(hit.url),
-                title=hit.title,
-                body=body,
-                retrieved_at=datetime.now(UTC),
-                source_type=SourceType.WEB,
-            )
+            try:
+                source = build_source(
+                    url=str(hit.url),
+                    title=hit.title,
+                    body=body,
+                    retrieved_at=datetime.now(UTC),
+                    source_type=SourceType.WEB,
+                )
+            except Exception:  # noqa: BLE001 - converted to a stable public error
+                return researcher_failure_patch(
+                    state,
+                    "source_normalization_failed",
+                    current_round=round_number,
+                    queries_used=state.get("queries_used", 0) + attempts,
+                )
+            cancellation_checker.raise_if_cancelled()
+            try:
+                raw = await evidence_model.ainvoke(
+                    [
+                        SystemMessage(
+                            content=evidence_extraction_prompt(
+                                brief, task, round_number
+                            )
+                        ),
+                        HumanMessage(content=body),
+                    ]
+                )
+                extraction = EvidenceExtraction.model_validate(raw)
+            except Exception:  # noqa: BLE001 - converted to a stable public error
+                return researcher_failure_patch(
+                    state,
+                    "evidence_extraction_failed",
+                    current_round=round_number,
+                    queries_used=state.get("queries_used", 0) + attempts,
+                )
             sources[source.source_id] = source
-            raw = await evidence_model.ainvoke(
-                [
-                    SystemMessage(
-                        content=evidence_extraction_prompt(brief, task, round_number)
-                    ),
-                    HumanMessage(content=body),
-                ]
-            )
-            extraction = EvidenceExtraction.model_validate(raw)
             for item in extraction.items:
                 if len(evidence) >= budgets.max_evidence_per_task:
                     break
@@ -160,33 +264,69 @@ def extract_evidence_node(
                     discovered_in_round=round_number,
                 )
                 evidence[built.evidence_id] = built
-        return {"sources": sources, "evidence": evidence, "raw_results": []}
+                added_ids.append(built.evidence_id)
+        if added_ids:
+            await event_sink.emit(
+                "evidence_added",
+                {
+                    "task_id": task.task_id,
+                    "round": round_number,
+                    "evidence_ids": sorted(added_ids),
+                    "count": len(added_ids),
+                },
+            )
+        return {
+            "sources": sources,
+            "evidence": evidence,
+            "current_round": round_number,
+            "queries_used": state.get("queries_used", 0) + attempts,
+        }
 
-    return extract_evidence
+    return research_round
 
 
-def complete_task_node(state: ResearcherState) -> ResearcherOutput:
-    gap = state.get("gap_assessment")
-    if gap is None:
-        gap = GapAssessment(
-            task_id=state["task"].task_id,
-            coverage=CoverageLevel.INSUFFICIENT,
-            missing_questions=state["task"].completion_criteria,
-            should_continue=False,
-            reason="No global query capacity remained",
+def complete_task_node(event_sink: EventSink):
+    async def complete_task(state: ResearcherState) -> ResearcherOutput:
+        gap = state.get("gap_assessment")
+        if gap is None:
+            gap = GapAssessment(
+                task_id=state["task"].task_id,
+                coverage=CoverageLevel.INSUFFICIENT,
+                missing_questions=state["task"].completion_criteria,
+                should_continue=False,
+                reason="No global query capacity remained",
+            )
+        if state.get("failed", False):
+            status = TaskStatus.FAILED
+        elif gap.coverage is CoverageLevel.SUFFICIENT and state.get("evidence"):
+            status = TaskStatus.COMPLETED
+        else:
+            status = TaskStatus.INSUFFICIENT
+        errors = state.get("errors", [])
+        updated_task = state["task"].model_copy(
+            update={
+                "status": status,
+                "current_round": state.get("current_round", 0),
+                "error": errors[-1].message if status is TaskStatus.FAILED else None,
+            }
         )
-    status = (
-        TaskStatus.COMPLETED
-        if gap.coverage is CoverageLevel.SUFFICIENT and state.get("evidence")
-        else TaskStatus.INSUFFICIENT
-    )
-    return {
-        "updated_task": state["task"].model_copy(
-            update={"status": status, "current_round": state.get("current_round", 0)}
-        ),
-        "sources": state.get("sources", {}),
-        "evidence": state.get("evidence", {}),
-        "gap_assessment": gap,
-        "errors": state.get("errors", []),
-        "queries_used": state.get("queries_used", 0),
-    }
+        event_type = "task_failed" if status is TaskStatus.FAILED else "task_completed"
+        payload: dict[str, object] = {
+            "task_id": updated_task.task_id,
+            "status": status.value,
+            "round": updated_task.current_round,
+            "queries_used": state.get("queries_used", 0),
+        }
+        if status is TaskStatus.FAILED:
+            payload["error_code"] = errors[-1].error_code
+        await event_sink.emit(event_type, payload)
+        return {
+            "updated_task": updated_task,
+            "sources": state.get("sources", {}),
+            "evidence": state.get("evidence", {}),
+            "gap_assessment": gap,
+            "errors": errors,
+            "queries_used": state.get("queries_used", 0),
+        }
+
+    return complete_task

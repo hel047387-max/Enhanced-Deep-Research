@@ -21,6 +21,22 @@ class TavilySearchProvider:
     def __init__(self, client: "AsyncTavilyClient") -> None:
         self._client = client
 
+    @classmethod
+    def from_api_key(cls, api_key: str) -> "TavilySearchProvider":
+        try:
+            from tavily import AsyncTavilyClient
+        except ImportError:
+            raise RuntimeError(
+                "Missing search dependency; install the 'tavily-python' package."
+            ) from None
+        try:
+            return cls(AsyncTavilyClient(api_key=api_key))
+        except Exception as exc:
+            raise RuntimeError(
+                "Could not initialize Tavily search; verify the tavily-python "
+                "installation and API key."
+            ) from exc
+
     async def search(self, query: str, max_results: int) -> list[SearchHit]:
         response = await self._client.search(
             query=query,

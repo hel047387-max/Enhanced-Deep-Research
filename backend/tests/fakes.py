@@ -92,6 +92,8 @@ class ResearcherHarness:
             evidence_model=ScriptedStructuredModel(evidence_outputs),
             gap_model=ScriptedStructuredModel(gaps),
             budgets=ResearchBudgets(),
+            event_sink=RecordingEventSink(),
+            cancellation_checker=NeverCancelled(),
         )
 
     async def ainvoke(self, input_state: dict[str, object]) -> dict[str, object]:
@@ -293,6 +295,16 @@ class RecordingReviewerModel:
         )
 
 
+class RaisingStructuredModel:
+    def __init__(self, message: str) -> None:
+        self.message = message
+        self.calls: list[object] = []
+
+    async def ainvoke(self, input: object) -> dict[str, object]:
+        self.calls.append(input)
+        raise RuntimeError(self.message)
+
+
 class RecordingEventSink:
     def __init__(self) -> None:
         self.events: list[tuple[str, dict[str, object]]] = []
@@ -309,7 +321,7 @@ class NeverCancelled:
 class GraphHarness:
     def __init__(self) -> None:
         self._writer_model = RecordingWriterModel()
-        self._reviewer_model: RecordingReviewerModel | None = None
+        self._reviewer_model: object | None = None
         self._last_result: dict[str, object] | None = None
 
     @property
@@ -342,9 +354,16 @@ class GraphHarness:
             ],
         }
 
-    async def _run(self, verdict: ReviewVerdict, with_evidence: bool) -> dict[str, object]:
+    async def _run(
+        self,
+        verdict: ReviewVerdict,
+        with_evidence: bool,
+        *,
+        reviewer_model: object | None = None,
+        budgets: ResearchBudgets | None = None,
+    ) -> dict[str, object]:
         self._writer_model = RecordingWriterModel()
-        self._reviewer_model = RecordingReviewerModel(verdict)
+        self._reviewer_model = reviewer_model or RecordingReviewerModel(verdict)
         hit = SearchHit(
             title="Official result",
             url="https://example.com/result",
@@ -396,7 +415,7 @@ class GraphHarness:
             writer_model=self._writer_model,
             reviewer_model=self._reviewer_model,
             search_provider=search,
-            budgets=ResearchBudgets(),
+            budgets=budgets or ResearchBudgets(),
             event_sink=RecordingEventSink(),
             cancellation_checker=NeverCancelled(),
         )
@@ -426,3 +445,21 @@ class GraphHarness:
 
     async def run_without_evidence(self) -> dict[str, object]:
         return await self._run(ReviewVerdict.PASS, with_evidence=False)
+
+    async def run_with_reviewer_failure(self) -> dict[str, object]:
+        return await self._run(
+            ReviewVerdict.PASS,
+            with_evidence=True,
+            reviewer_model=RaisingStructuredModel(
+                "upstream reviewer failed with SECRET_REVIEW_TOKEN"
+            ),
+        )
+
+    async def run_with_reviewer_task_budget(
+        self, max_reviewer_tasks: int
+    ) -> dict[str, object]:
+        return await self._run(
+            ReviewVerdict.RESEARCH_GAP,
+            with_evidence=True,
+            budgets=ResearchBudgets(max_reviewer_tasks=max_reviewer_tasks),
+        )
