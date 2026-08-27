@@ -5,6 +5,7 @@ from datetime import datetime
 from enum import StrEnum
 from urllib.parse import unquote, urlsplit, urlunsplit
 
+import idna
 from pydantic import AnyHttpUrl, BaseModel, Field, field_validator
 
 
@@ -54,28 +55,55 @@ def _parse_legacy_ipv4_literal(host: str) -> ipaddress.IPv4Address | None:
 
 
 _UNICODE_DOTS = str.maketrans({"\u3002": ".", "\uff0e": ".", "\uff61": "."})
+_AUTHORITY_DELIMITERS = "@:/?#[]\\"
+_ENCODED_AUTHORITY_DELIMITERS = tuple(
+    f"%{ord(delimiter):02x}" for delimiter in _AUTHORITY_DELIMITERS
+)
 
 
-def _normalize_public_host(host: str) -> str:
-    decoded_host = unquote(host).translate(_UNICODE_DOTS).casefold().rstrip(".")
-    if not decoded_host:
-        raise ValueError("URL must include a host")
-
+def _normalize_public_literal(host: str) -> str | None:
     try:
-        address = ipaddress.ip_address(decoded_host)
+        address = ipaddress.ip_address(host)
     except ValueError:
-        address = _parse_legacy_ipv4_literal(decoded_host)
+        address = _parse_legacy_ipv4_literal(host)
     if address is not None:
         if not address.is_global or address.is_multicast:
             raise ValueError("non-global literal IP hosts are not allowed")
         return address.compressed
+    return None
+
+
+def _normalize_public_host(host: str) -> str:
+    encoded_host = host.casefold()
+    if any(delimiter in encoded_host for delimiter in _ENCODED_AUTHORITY_DELIMITERS):
+        raise ValueError("percent-decoded authority delimiters are not allowed")
+
+    decoded_host = unquote(host)
+    if any(delimiter in decoded_host for delimiter in "@/?#[]\\"):
+        raise ValueError("URL host contains an authority delimiter")
+    mapped_host = decoded_host.translate(_UNICODE_DOTS).rstrip(".")
+    if not mapped_host:
+        raise ValueError("URL must include a host")
+
+    literal_host = _normalize_public_literal(mapped_host)
+    if literal_host is not None:
+        return literal_host
 
     try:
-        normalized_host = decoded_host.encode("idna").decode("ascii").casefold().rstrip(".")
-    except UnicodeError as exc:
+        normalized_host = (
+            idna.encode(mapped_host, uts46=True, transitional=False)
+            .decode("ascii")
+            .lower()
+            .rstrip(".")
+        )
+    except idna.IDNAError as exc:
         raise ValueError("invalid URL host") from exc
     if not normalized_host:
         raise ValueError("URL must include a host")
+
+    literal_host = _normalize_public_literal(normalized_host)
+    if literal_host is not None:
+        return literal_host
     if normalized_host == "localhost" or normalized_host.endswith(".localhost"):
         raise ValueError("localhost URLs are not allowed")
     return normalized_host

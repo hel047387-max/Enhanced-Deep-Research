@@ -32,6 +32,11 @@ def test_same_canonical_url_produces_same_source_id() -> None:
             "https://xn--xample-9ua.com/path",
             "https://xn--xample-9ua.com/path",
         ),
+        (
+            "https://faß.de./path",
+            "https://xn--fa-hia.de/path",
+            "https://xn--fa-hia.de/path",
+        ),
         ("https://example.com./path", "https://example.com/path", "https://example.com/path"),
     ],
 )
@@ -49,6 +54,20 @@ def test_host_aliases_have_one_canonical_url_and_source_id(
     assert canonicalize_url(equivalent) == canonical
     assert first.source_id == second.source_id
     assert str(first.canonical_url).rstrip("/") == canonical
+
+
+def test_builder_stores_and_hashes_the_final_modern_idna_canonical_url() -> None:
+    source = build_source(
+        "https://faß.de./path#section",
+        "Modern IDNA",
+        "body",
+        datetime(2026, 8, 26, tzinfo=UTC),
+        SourceType.WEB,
+    )
+
+    assert str(source.url) == "https://xn--fa-hia.de/path#section"
+    assert str(source.canonical_url) == "https://xn--fa-hia.de/path"
+    assert source.source_id == "src-0ee6050d80cffc8f"
 
 
 def test_evidence_id_is_stable_for_same_task_source_claim() -> None:
@@ -103,6 +122,12 @@ def test_source_hashes_body_without_storing_raw_body() -> None:
         "https://0x7f000001/path",
         "http://127。0。0。1/path",
         "http://%31%32%37.0.0.1/path",
+        "http://１２７.０.０.１/path",
+        "http://example.com%40127.0.0.1/path",
+        "https://example.com%2Fattacker/path",
+        "https://example.com%3Fquery/path",
+        "https://example.com%23fragment/path",
+        "https://example.com%5Cpath/path",
         "https://user@example.com/path",
         "https://user:password@example.com/path",
         "https://0.0.0.0/path",
@@ -121,6 +146,8 @@ def test_canonicalize_url_rejects_unsafe_url_hosts_and_schemes(url: str) -> None
         "https://localhost/path",
         "http://127。0。0。1/path",
         "http://%31%32%37.0.0.1/path",
+        "http://１２７.０.０.１/path",
+        "http://example.com%40127.0.0.1/path",
         "https://user@example.com/path",
     ],
 )
@@ -142,6 +169,7 @@ def test_source_validation_rejects_unsafe_url_even_when_constructed_directly(url
     ("alias", "equivalent"),
     [
         ("https://éxample.com/path", "https://xn--xample-9ua.com/path"),
+        ("https://faß.de./path", "https://xn--fa-hia.de/path"),
         ("https://example.com./path", "https://example.com/path"),
     ],
 )
