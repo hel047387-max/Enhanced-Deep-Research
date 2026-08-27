@@ -682,3 +682,11 @@ python -c "from deep_research.state.models import ResearchState; print(ResearchS
 ```
 
 Expected: all unit tests pass, Ruff is clean, and the import prints `ResearchState`. Do not begin the Agent workflow plan until this gate passes.
+
+## Implementation rulings (2026-08-27)
+
+- URL authority normalization uses non-transitional UTS46/IDNA2008, rejects delimiters introduced by decoding, and reapplies non-global literal-host policy after final normalization. DNS, redirect, and rebinding checks remain assigned to the hardening plan.
+- `validate_draft` and `render_report` consume the run-scoped task map in addition to Evidence and Source maps so evidence from unknown or failed tasks is rejected.
+- `merge_sources` is source-specific: mapping keys must match stable source IDs derived from canonical URLs, and conflicting snapshots resolve by a deterministic total order.
+- Settings budget fields carry the same construction-time bounds as `ResearchBudgets`; callers cannot bypass caps by reading Settings directly.
+- Review verdict/follow-up semantics and finite JSON event payloads are validated at the domain boundary.
