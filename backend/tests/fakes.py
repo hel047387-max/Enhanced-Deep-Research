@@ -1,7 +1,8 @@
 import asyncio
 import json
 import re
-from collections.abc import Sequence
+from collections import Counter
+from collections.abc import Callable, Sequence
 from typing import Any
 
 from pydantic import BaseModel
@@ -21,17 +22,42 @@ from deep_research.graph.builder import (
     build_researcher_graph,
     build_supervisor_graph,
 )
+from deep_research.services.cancellation import ResearchCancelled
+from deep_research.services.citations import validate_draft
 from deep_research.tools.search import SearchHit
 
 
 class FakeSearchProvider:
-    def __init__(self, scripted_hits: dict[str, list[SearchHit]]) -> None:
+    def __init__(
+        self,
+        scripted_hits: dict[str, list[SearchHit]],
+        *,
+        failing_queries: set[str] | None = None,
+        on_search: Callable[[str], None] | None = None,
+    ) -> None:
         self.scripted_hits = scripted_hits
         self.queries: list[str] = []
+        self.failing_queries = failing_queries or set()
+        self.on_search = on_search
+        self.active_searches = 0
+        self.peak_concurrency = 0
+        self._lock = asyncio.Lock()
 
     async def search(self, query: str, max_results: int) -> list[SearchHit]:
         self.queries.append(query)
-        return self.scripted_hits.get(query, [])[:max_results]
+        async with self._lock:
+            self.active_searches += 1
+            self.peak_concurrency = max(self.peak_concurrency, self.active_searches)
+        try:
+            await asyncio.sleep(0)
+            if self.on_search is not None:
+                self.on_search(query)
+            if query in self.failing_queries:
+                raise TimeoutError("scripted provider failure")
+            return self.scripted_hits.get(query, [])[:max_results]
+        finally:
+            async with self._lock:
+                self.active_searches -= 1
 
 
 class ScriptedStructuredModel:
@@ -318,11 +344,25 @@ class NeverCancelled:
         return None
 
 
+class ToggleCancellation:
+    def __init__(self) -> None:
+        self.cancelled = False
+
+    def cancel(self, _query: str) -> None:
+        self.cancelled = True
+
+    def raise_if_cancelled(self) -> None:
+        if self.cancelled:
+            raise ResearchCancelled("research was cancelled")
+
+
 class GraphHarness:
     def __init__(self) -> None:
         self._writer_model = RecordingWriterModel()
         self._reviewer_model: object | None = None
         self._last_result: dict[str, object] | None = None
+        self._search: FakeSearchProvider | None = None
+        self._event_sink: RecordingEventSink | None = None
 
     @property
     def writer_calls(self) -> int:
@@ -361,6 +401,9 @@ class GraphHarness:
         *,
         reviewer_model: object | None = None,
         budgets: ResearchBudgets | None = None,
+        failing_queries: set[str] | None = None,
+        cancellation_checker: object | None = None,
+        on_search: Callable[[str], None] | None = None,
     ) -> dict[str, object]:
         self._writer_model = RecordingWriterModel()
         self._reviewer_model = reviewer_model or RecordingReviewerModel(verdict)
@@ -376,8 +419,12 @@ class GraphHarness:
                 "query 2": hits,
                 "query 3": hits,
                 "review query": hits,
-            }
+            },
+            failing_queries=failing_queries,
+            on_search=on_search,
         )
+        self._search = search
+        self._event_sink = RecordingEventSink()
         evidence_model = ScriptedStructuredModel(
             [
                 {
@@ -416,8 +463,8 @@ class GraphHarness:
             reviewer_model=self._reviewer_model,
             search_provider=search,
             budgets=budgets or ResearchBudgets(),
-            event_sink=RecordingEventSink(),
-            cancellation_checker=NeverCancelled(),
+            event_sink=self._event_sink,
+            cancellation_checker=cancellation_checker or NeverCancelled(),
         )
         graph = build_research_graph(deps)
         self._last_result = await graph.ainvoke(
@@ -463,3 +510,112 @@ class GraphHarness:
             with_evidence=True,
             budgets=ResearchBudgets(max_reviewer_tasks=max_reviewer_tasks),
         )
+
+
+class AcceptanceHarness(GraphHarness):
+    @property
+    def initial_task_count(self) -> int:
+        return sum(
+            task.parent_task_id is None
+            for task in self._result_tasks().values()
+        )
+
+    @property
+    def supervisor_task_count(self) -> int:
+        return sum(
+            task.parent_task_id is not None and task.task_id != "review-task"
+            for task in self._result_tasks().values()
+        )
+
+    @property
+    def reviewer_task_count(self) -> int:
+        return int("review-task" in self._result_tasks())
+
+    @property
+    def peak_concurrency(self) -> int:
+        return self._search.peak_concurrency if self._search is not None else 0
+
+    @property
+    def total_queries(self) -> int:
+        if self._last_result is not None:
+            return int(self._last_result.get("total_queries", 0))
+        return len(self._search.queries) if self._search is not None else 0
+
+    @property
+    def rounds_by_task(self) -> dict[str, int]:
+        return {
+            task_id: task.current_round
+            for task_id, task in self._result_tasks().items()
+        }
+
+    @property
+    def queries_by_round(self) -> dict[str, int]:
+        if self._event_sink is None:
+            return {}
+        return {
+            f"{payload['task_id']}:{payload['round']}": int(payload["query_count"])
+            for event_type, payload in self._event_sink.events
+            if event_type == "search_completed"
+        }
+
+    @property
+    def max_sources_per_task(self) -> int:
+        counts: Counter[str] = Counter()
+        source_ids_by_task: dict[str, set[str]] = {}
+        if self._last_result is not None:
+            for item in self._last_result.get("evidence", {}).values():
+                source_ids_by_task.setdefault(item.task_id, set()).add(item.source_id)
+        counts.update({task_id: len(ids) for task_id, ids in source_ids_by_task.items()})
+        return max(counts.values(), default=0)
+
+    @property
+    def max_evidence_per_task(self) -> int:
+        if self._last_result is None:
+            return 0
+        counts = Counter(
+            item.task_id for item in self._last_result.get("evidence", {}).values()
+        )
+        return max(counts.values(), default=0)
+
+    @property
+    def invalid_citation_ids(self) -> list[str]:
+        if self._last_result is None or self._last_result.get("draft_report") is None:
+            return []
+        issues = validate_draft(
+            self._last_result["draft_report"],
+            self._last_result.get("evidence", {}),
+            self._last_result.get("sources", {}),
+            self._last_result.get("tasks", {}),
+        )
+        return [issue.evidence_id for issue in issues if issue.evidence_id is not None]
+
+    def _result_tasks(self) -> dict[str, ResearchTask]:
+        if self._last_result is None:
+            return {}
+        return self._last_result.get("tasks", {})
+
+    async def run_complex_case(self) -> dict[str, object]:
+        return await self._run(ReviewVerdict.PASS, with_evidence=True)
+
+    async def run_with_one_failed_task(self) -> dict[str, object]:
+        return await self._run(
+            ReviewVerdict.PASS,
+            with_evidence=True,
+            failing_queries={"query 2"},
+        )
+
+    async def run_with_zero_evidence(self) -> dict[str, object]:
+        return await self._run(ReviewVerdict.PASS, with_evidence=False)
+
+    async def cancel_after_first_search(self) -> dict[str, object]:
+        checker = ToggleCancellation()
+        try:
+            return await self._run(
+                ReviewVerdict.PASS,
+                with_evidence=True,
+                cancellation_checker=checker,
+                on_search=checker.cancel,
+            )
+        except ResearchCancelled:
+            self._last_result = None
+            return {"status": "cancelled", "final_report": ""}

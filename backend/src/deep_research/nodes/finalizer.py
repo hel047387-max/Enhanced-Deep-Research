@@ -1,3 +1,4 @@
+from deep_research.domain.plan import TaskStatus
 from deep_research.domain.review import ReportDraft
 from deep_research.services.citations import render_report, validate_draft
 from deep_research.state.models import ResearchState
@@ -45,6 +46,24 @@ async def finalize_report(state: ResearchState) -> dict[str, object]:
     draft = state["draft_report"]
     if draft is None:
         raise ValueError("cannot finalize without a draft")
+    failure_limitations = [
+        f"Failed task {task.task_id} ({task.title}) limited report coverage."
+        for task in sorted(state.get("tasks", {}).values(), key=lambda item: item.task_id)
+        if task.status is TaskStatus.FAILED
+    ]
+    if failure_limitations:
+        draft = draft.model_copy(
+            update={
+                "limitations": [
+                    *draft.limitations,
+                    *(
+                        limitation
+                        for limitation in failure_limitations
+                        if limitation not in draft.limitations
+                    ),
+                ]
+            }
+        )
     issues = validate_draft(
         draft,
         state.get("evidence", {}),
