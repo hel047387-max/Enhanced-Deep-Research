@@ -101,7 +101,7 @@ npm ci --cache ..\.npm-cache
 npm run dev
 ```
 
-The frontend calls `/api/v1/research` on its own origin. For live local UI use, put the Vite origin and FastAPI behind the same-origin reverse proxy. The frontend build and tests do not require providers.
+The frontend calls `/api/v1/research` on its own origin. The Vite development server proxies `/api` to `http://127.0.0.1:8000`, so the two commands above connect directly during local development. The frontend build and tests do not require providers.
 
 ## Configuration
 
@@ -127,7 +127,7 @@ npm run build
 
 ## Reproducible evaluation
 
-The fixed JSON Lines dataset covers 15 technical comparisons, ambiguous inputs, conflicting claims, security, and weak-evidence cases. The fake runner reports deterministic coverage, task overlap, citation validity, grounding, source diversity, budget, latency, recovery, and transparency metrics without network access:
+The fixed JSON Lines dataset covers 15 technical comparisons, ambiguous inputs, conflicting claims, security, and weak-evidence cases. The current fake runner is a deterministic synthetic metric smoke test: it checks stable dataset/CLI/metric contracts without executing the production graph or measuring provider quality. It reports coverage, task overlap, citation validity, grounding, source diversity, budget, latency, recovery, and transparency fields without network access:
 
 ```powershell
 cd backend
@@ -147,6 +147,8 @@ No screenshots are checked in because fabricated or stale images would be mislea
 - SQLite plus an in-process event publisher does not support horizontal scaling, multiple API workers, or durable event replay.
 - Tavily is the only implemented search provider. A general crawler and redirect-aware page-fetch client are outside this MVP.
 - Live providers determine real-world latency and retrieval quality; fake evaluation measures reproducible contracts, not provider quality.
+- Supervisor/Reviewer adaptive task IDs and parent links still need collision and ancestry hardening before accepting less constrained model outputs.
+- Provider-wide retry/timeout wiring and a strict raw-content character cap remain future hardening; the existing helpers are not yet applied across every live boundary.
 - User accounts, authorization, multi-tenancy, vector memory, file/PDF upload, academic-specific retrieval, cloud deployment, and automatic publishing are not implemented.
 
 ## What I redesigned

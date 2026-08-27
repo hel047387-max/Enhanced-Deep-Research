@@ -15,6 +15,8 @@ def test_readme_contains_verified_commands_and_boundaries() -> None:
         "SSE history replay is not supported",
         "single FastAPI instance",
         "Live evaluation incurs provider cost",
+        "Vite development server proxies `/api`",
+        "deterministic synthetic metric smoke test",
         "What I redesigned",
     ]
 
