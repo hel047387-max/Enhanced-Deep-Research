@@ -131,8 +131,8 @@ export interface ResearchSnapshot {
 export interface ResearchEventPayloads {
   run_started: Record<string, never>;
   clarification_required: { question: string };
-  research_brief_created: Record<string, never>;
-  plan_created: { task_count: number; tasks?: ResearchTaskWire[] };
+  research_brief_created: { brief: ResearchBriefWire };
+  plan_created: { task_count: number; tasks: ResearchTaskWire[] };
   task_started: { task_id: string };
   search_started: { task_id: string; round: number; query_count: number };
   search_completed: {
@@ -147,8 +147,8 @@ export interface ResearchEventPayloads {
     round: number;
     evidence_ids: string[];
     count: number;
-    evidence?: EvidenceWire[];
-    sources?: SourceWire[];
+    evidence: EvidenceWire[];
+    sources: SourceWire[];
   };
   gap_assessed: {
     task_id: string;
@@ -171,9 +171,11 @@ export interface ResearchEventPayloads {
   coverage_assessed: { task_count: number };
   additional_tasks_created: { tasks?: ResearchTaskWire[]; task_count?: number };
   draft_created: Record<string, never>;
-  review_completed: { verdict?: ReviewVerdict; status?: "incomplete" };
+  review_completed:
+    | { verdict: ReviewVerdict; review: ReviewResultWire }
+    | { status: "incomplete" };
   revision_started: { after_research?: boolean };
-  report_finalized: { report?: string };
+  report_finalized: { report: string };
   run_cancelled: { message: string };
   error: ResearchErrorWire;
   done: { status: RunStatus };

@@ -142,6 +142,7 @@ export function applyResearchEvent(current: ResearchUIState, event: ResearchEven
     case "clarification_required":
       return { ...state, status: "waiting_for_user", clarification: event.payload.question };
     case "research_brief_created":
+      return { ...state, researchBrief: briefFromWire(event.payload.brief) };
     case "coverage_assessed":
     case "draft_created":
       return state;
@@ -171,11 +172,13 @@ export function applyResearchEvent(current: ResearchUIState, event: ResearchEven
     case "additional_tasks_created":
       return { ...state, tasks: mergeWireTasks(state.tasks, event.payload.tasks) };
     case "review_completed":
-      return event.payload.verdict ? { ...state, review: emptyReview(event.payload.verdict) } : state;
+      return "review" in event.payload
+        ? { ...state, review: reviewFromWire(event.payload.review) }
+        : state;
     case "revision_started":
       return { ...state, status: "running" };
     case "report_finalized":
-      return { ...state, report: event.payload.report ?? state.report };
+      return { ...state, report: event.payload.report };
     case "run_cancelled":
       return { ...state, status: "cancelled", error: null };
     case "error":

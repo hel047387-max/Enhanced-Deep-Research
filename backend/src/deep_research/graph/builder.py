@@ -200,13 +200,25 @@ def build_research_graph_builder(
     async def brief_node(state: ResearchState) -> dict[str, object]:
         deps.cancellation_checker.raise_if_cancelled()
         patch = await write_research_brief(state, deps.clarifier_model)
-        await deps.event_sink.emit("research_brief_created", {})
+        await deps.event_sink.emit(
+            "research_brief_created",
+            {"brief": patch["research_brief"].model_dump(mode="json")},
+        )
         return patch
 
     async def planner_node(state: ResearchState) -> dict[str, object]:
         deps.cancellation_checker.raise_if_cancelled()
         patch = await plan_research(state, deps.planner_model, budgets=deps.budgets)
-        await deps.event_sink.emit("plan_created", {"task_count": len(patch["tasks"])})
+        await deps.event_sink.emit(
+            "plan_created",
+            {
+                "task_count": len(patch["tasks"]),
+                "tasks": [
+                    task.model_dump(mode="json")
+                    for task in patch["tasks"].values()
+                ],
+            },
+        )
         return patch
 
     async def supervisor_node(state: ResearchState) -> dict[str, object]:
@@ -317,7 +329,10 @@ def build_research_graph_builder(
             }
         await deps.event_sink.emit(
             "review_completed",
-            {"verdict": patch["review_result"].verdict.value},
+            {
+                "verdict": patch["review_result"].verdict.value,
+                "review": patch["review_result"].model_dump(mode="json"),
+            },
         )
         return patch
 
@@ -384,7 +399,10 @@ def build_research_graph_builder(
     async def finalizer_node(state: ResearchState) -> dict[str, object]:
         deps.cancellation_checker.raise_if_cancelled()
         patch = await finalize_report(state)
-        await deps.event_sink.emit("report_finalized", {})
+        await deps.event_sink.emit(
+            "report_finalized",
+            {"report": patch["final_report"]},
+        )
         return patch
 
     builder.add_node("clarify", clarify_node)

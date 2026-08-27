@@ -266,6 +266,8 @@ def research_round_node(
                 evidence[built.evidence_id] = built
                 added_ids.append(built.evidence_id)
         if added_ids:
+            added_evidence = [evidence[evidence_id] for evidence_id in sorted(added_ids)]
+            added_source_ids = {item.source_id for item in added_evidence}
             await event_sink.emit(
                 "evidence_added",
                 {
@@ -273,6 +275,13 @@ def research_round_node(
                     "round": round_number,
                     "evidence_ids": sorted(added_ids),
                     "count": len(added_ids),
+                    "sources": [
+                        sources[source_id].model_dump(mode="json")
+                        for source_id in sorted(added_source_ids)
+                    ],
+                    "evidence": [
+                        item.model_dump(mode="json") for item in added_evidence
+                    ],
                 },
             )
         return {

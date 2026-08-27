@@ -217,7 +217,17 @@ class ResearchRuntime:
         graph_input: dict[str, object] | Command,
     ) -> RunHandle:
         self._publisher.open_run(run_id)
-        events = self._publisher.subscribe(run_id)
+        subscription = self._publisher.subscribe(run_id)
+
+        async def tracked_events() -> AsyncIterator[ResearchEvent]:
+            try:
+                async for event in subscription:
+                    yield event
+            finally:
+                self._streams.pop(run_id, None)
+                await subscription.aclose()
+
+        events = tracked_events()
         handle = RunHandle(run_id=run_id, thread_id=thread_id, events=events)
         self._streams[run_id] = events
         task = asyncio.create_task(self._execute(run_id, thread_id, graph_input))
@@ -323,6 +333,7 @@ class ResearchRuntime:
         finally:
             _CURRENT_EXECUTION.reset(token)
             await self._publisher.close(run_id)
+            self._streams.pop(run_id, None)
 
     @staticmethod
     def _config(thread_id: str) -> dict[str, object]:

@@ -77,3 +77,18 @@ async def test_close_terminates_subscription() -> None:
 
     with pytest.raises(StopAsyncIteration):
         await anext(subscription)
+
+
+@pytest.mark.asyncio
+async def test_detached_subscriber_does_not_break_publish_or_terminal_cleanup() -> None:
+    publisher = EventPublisher()
+    publisher.open_run("run-1")
+    subscription = publisher.subscribe("run-1")
+    await publisher.publish(EventType.RUN_STARTED, "run-1", "thread-1", {})
+    await anext(subscription)
+
+    await subscription.aclose()
+    await publisher.publish(EventType.PLAN_CREATED, "run-1", "thread-1", {})
+    await publisher.close("run-1")
+
+    publisher.open_run("run-1")

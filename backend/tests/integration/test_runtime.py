@@ -1,10 +1,39 @@
+import asyncio
 import json
+from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
 from deep_research.domain.events import EventType
-from deep_research.persistence.run_store import RunStatus
-from deep_research.services.runtime import InvalidResumeState
+from deep_research.graph.builder import build_research_graph
+from deep_research.persistence.checkpoint import checkpoint_context
+from deep_research.persistence.run_store import RunStatus, RunStore
+from deep_research.services.cancellation import CancellationRegistry
+from deep_research.services.event_stream import EventPublisher
+from deep_research.services.runtime import InvalidResumeState, ResearchRuntime
+from tests.conftest import runtime_dependencies
+
+_CONTRACT = Path(__file__).parents[3] / "contracts" / "research-event-sequence.json"
+
+
+def _shape(value):
+    if isinstance(value, dict):
+        return {key: _shape(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_shape(value[0])] if value else []
+    return type(value)
+
+
+class _BlockingSearch:
+    def __init__(self) -> None:
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def search(self, query: str, max_results: int):
+        self.started.set()
+        await self.release.wait()
+        return []
 
 
 @pytest.mark.asyncio
@@ -53,6 +82,75 @@ async def test_snapshot_reads_committed_graph_projection(runtime_harness) -> Non
     assert snapshot.status is RunStatus.COMPLETED
     assert snapshot.report is not None
     assert snapshot.tasks
+
+
+@pytest.mark.asyncio
+async def test_runtime_emits_shared_projection_contract(runtime_harness) -> None:
+    expected = {
+        event["type"]: event["payload"]
+        for event in json.loads(_CONTRACT.read_text(encoding="utf-8"))
+    }
+    handle = await runtime_harness.runtime.start("A complete question with scope")
+    events = [event async for event in handle.events]
+    await runtime_harness.wait_until(handle.run_id, RunStatus.COMPLETED)
+    actual = {event.type.value: event.payload for event in events}
+
+    for event_type in (
+        "research_brief_created",
+        "plan_created",
+        "evidence_added",
+        "review_completed",
+        "report_finalized",
+    ):
+        assert _shape(actual[event_type]) == _shape(expected[event_type])
+    assert "raw_content" not in json.dumps(actual)
+    assert "page_body" not in json.dumps(actual)
+
+
+@pytest.mark.asyncio
+async def test_completed_runtime_removes_stream_registry_entry(runtime_harness) -> None:
+    handle = await runtime_harness.runtime.start("A complete question with scope")
+    await runtime_harness.wait_until(handle.run_id, RunStatus.COMPLETED)
+
+    assert handle.run_id not in runtime_harness.runtime._streams
+
+
+@pytest.mark.asyncio
+async def test_disconnect_during_search_does_not_prevent_cancellation(tmp_path) -> None:
+    database = tmp_path / "disconnect.sqlite"
+    store = RunStore(database)
+    await store.initialize()
+    publisher = EventPublisher()
+    cancellation = CancellationRegistry()
+    search = _BlockingSearch()
+    async with checkpoint_context(database) as checkpointer:
+        dependencies = replace(
+            runtime_dependencies(publisher, cancellation),
+            search_provider=search,
+        )
+        runtime = ResearchRuntime(
+            build_research_graph(dependencies, checkpointer=checkpointer),
+            store,
+            publisher,
+            cancellation,
+        )
+        handle = await runtime.start("A complete question with scope")
+        await anext(handle.events)
+        await handle.events.aclose()
+        await asyncio.wait_for(search.started.wait(), timeout=2)
+
+        await runtime.cancel(handle.thread_id)
+        search.release.set()
+
+        async def cancelled():
+            while True:
+                metadata = await store.get_run(handle.run_id)
+                if metadata is not None and metadata.status is RunStatus.CANCELLED:
+                    return
+                await asyncio.sleep(0.01)
+
+        await asyncio.wait_for(cancelled(), timeout=2)
+        await runtime.close()
 
 
 @pytest.mark.asyncio

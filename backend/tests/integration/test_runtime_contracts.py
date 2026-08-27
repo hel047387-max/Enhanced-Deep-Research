@@ -47,7 +47,11 @@ def _task(task_id: str = "task-1", query: str = "initial query") -> ResearchTask
 
 
 def _hit(url: str = "https://example.com/result") -> SearchHit:
-    return SearchHit(title="Official result", url=url, content="Supported result")
+    return SearchHit(
+        title="Official result",
+        url=url,
+        content="RAW_PAGE_SECRET Supported result",
+    )
 
 
 def _evidence_output() -> dict[str, object]:
@@ -164,7 +168,7 @@ async def test_researcher_emits_sanitized_agent_core_event_sequence() -> None:
         "task_completed",
     ]
     serialized = json.dumps(sink.events)
-    assert "Supported result" not in serialized
+    assert "RAW_PAGE_SECRET" not in serialized
     assert "initial query" not in serialized
     assert "raw_content" not in serialized
 

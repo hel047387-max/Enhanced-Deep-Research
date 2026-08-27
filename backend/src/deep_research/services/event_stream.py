@@ -16,6 +16,7 @@ class _RunChannel:
     queue: asyncio.Queue[ResearchEvent | None]
     sequence: int = 0
     subscribed: bool = False
+    attached: bool = False
     terminated: bool = False
 
 
@@ -37,6 +38,7 @@ class EventPublisher:
         if channel.subscribed:
             raise ValueError(f"run already has a subscriber: {run_id}")
         channel.subscribed = True
+        channel.attached = True
 
         async def iterate() -> AsyncIterator[ResearchEvent]:
             try:
@@ -46,8 +48,9 @@ class EventPublisher:
                         return
                     yield event
             finally:
-                if self._runs.get(run_id) is channel:
-                    self._runs.pop(run_id, None)
+                channel.attached = False
+                while not channel.queue.empty():
+                    channel.queue.get_nowait()
 
         return iterate()
 
@@ -63,8 +66,11 @@ class EventPublisher:
             raise ValueError(f"run is not open: {run_id}")
         if channel.terminated:
             return
+        if channel.subscribed and not channel.attached:
+            return
         if channel.queue.full():
             self._terminate_overflow(channel, run_id, thread_id)
+            self._runs.pop(run_id, None)
             return
         channel.sequence += 1
         channel.queue.put_nowait(
@@ -82,10 +88,15 @@ class EventPublisher:
         channel = self._runs.get(run_id)
         if channel is None or channel.terminated:
             return
+        self._runs.pop(run_id, None)
+        channel.terminated = True
+        if not channel.attached:
+            while not channel.queue.empty():
+                channel.queue.get_nowait()
+            return
         if channel.queue.full():
             self._terminate_overflow(channel, run_id, "unavailable")
             return
-        channel.terminated = True
         channel.queue.put_nowait(_CLOSE)
 
     @staticmethod

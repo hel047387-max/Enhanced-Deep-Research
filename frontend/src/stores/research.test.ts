@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import contractSequence from "../../../contracts/research-event-sequence.json";
 import type {
   ResearchEvent,
   ResearchEventType,
@@ -60,6 +61,21 @@ function snapshot(overrides: Partial<ResearchSnapshot> = {}): ResearchSnapshot {
 }
 
 describe("applyResearchEvent", () => {
+  it("projects the shared backend event contract into complete UI state", () => {
+    const state = (contractSequence as ResearchEvent[]).reduce(
+      applyResearchEvent,
+      initialResearchState(),
+    );
+
+    expect(state.status).toBe("completed");
+    expect(state.researchBrief?.scope).toBe("Three evidence dimensions");
+    expect(state.tasks["task-1"]?.title).toBe("Dimension 1");
+    expect(state.sources["source-1"]?.domain).toBe("example.com");
+    expect(state.evidence["evidence-1"]?.claim).toContain("supports");
+    expect(state.review?.verdict).toBe("pass");
+    expect(state.report).toContain("# Research report");
+  });
+
   it("updates interleaved tasks and evidence by ID without replacing siblings", () => {
     let state = initialResearchState();
     state = applyResearchEvent(state, event("plan_created", 1, { task_count: 2, tasks: [task("a"), task("b")] }));
@@ -130,9 +146,11 @@ describe("applyResearchEvent", () => {
   });
 
   it("handles every backend event type through the same transition function", () => {
+    const contractPayload = (type: ResearchEventType): Record<string, unknown> =>
+      contractSequence.find((item) => item.type === type)?.payload ?? {};
     const payloads: Array<[ResearchEventType, Record<string, unknown>]> = [
       ["run_started", {}],
-      ["research_brief_created", {}],
+      ["research_brief_created", contractPayload("research_brief_created")],
       ["plan_created", { task_count: 1, tasks: [task("a")] }],
       ["task_started", { task_id: "a" }],
       ["search_started", { task_id: "a", round: 1, query_count: 1 }],
@@ -144,7 +162,7 @@ describe("applyResearchEvent", () => {
       ["coverage_assessed", { task_count: 1 }],
       ["additional_tasks_created", { tasks: [task("b")], task_count: 1 }],
       ["draft_created", {}],
-      ["review_completed", { verdict: "revise" }],
+      ["review_completed", contractPayload("review_completed")],
       ["revision_started", {}],
       ["report_finalized", { report: "# Final" }],
       ["run_cancelled", { message: "Cancelled" }],
