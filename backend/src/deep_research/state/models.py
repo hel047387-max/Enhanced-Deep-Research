@@ -1,3 +1,4 @@
+import operator
 from typing import Annotated, Literal, NotRequired, TypedDict
 
 from langchain_core.messages import BaseMessage
@@ -38,6 +39,8 @@ class ResearchState(TypedDict, total=False):
     evidence: NotRequired[Annotated[dict[str, EvidenceItem], merge_evidence]]
     gap_assessments: NotRequired[Annotated[dict[str, GapAssessment], merge_gap_assessments]]
     supervisor_added_tasks: NotRequired[int]
+    coverage_checked: NotRequired[bool]
+    total_queries: NotRequired[Annotated[int, operator.add]]
     draft_report: NotRequired[ReportDraft | None]
     review_result: NotRequired[ReviewResult | None]
     review_action_count: NotRequired[int]
