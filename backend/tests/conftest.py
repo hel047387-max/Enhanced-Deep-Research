@@ -3,8 +3,14 @@ from collections.abc import Callable
 import pytest
 from pydantic import BaseModel
 
-from deep_research.domain.plan import ResearchBrief, ResearchPlan, ResearchTask
-from tests.fakes import ScriptedStructuredModel
+from deep_research.domain.plan import (
+    CoverageLevel,
+    GapAssessment,
+    ResearchBrief,
+    ResearchPlan,
+    ResearchTask,
+)
+from tests.fakes import ResearcherHarness, ScriptedStructuredModel
 
 
 @pytest.fixture
@@ -45,3 +51,32 @@ def three_task_plan() -> ResearchPlan:
 @pytest.fixture
 def model_factory() -> Callable[[BaseModel | dict[str, object]], ScriptedStructuredModel]:
     return lambda result: ScriptedStructuredModel([result])
+
+
+@pytest.fixture
+def partial_gap() -> GapAssessment:
+    return GapAssessment(
+        task_id="task-1",
+        coverage=CoverageLevel.PARTIAL,
+        covered_questions=["market size"],
+        missing_questions=["growth rate"],
+        next_queries=["targeted query"],
+        should_continue=True,
+        reason="Growth rate remains missing",
+    )
+
+
+@pytest.fixture
+def sufficient_gap() -> GapAssessment:
+    return GapAssessment(
+        task_id="task-1",
+        coverage=CoverageLevel.SUFFICIENT,
+        covered_questions=["market size", "growth rate"],
+        should_continue=False,
+        reason="Completion criteria are covered",
+    )
+
+
+@pytest.fixture
+def researcher_factory() -> Callable[[list[GapAssessment], int], ResearcherHarness]:
+    return lambda gaps, total_queries=0: ResearcherHarness(gaps, total_queries)
