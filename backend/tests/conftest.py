@@ -4,8 +4,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
+from httpx import ASGITransport, AsyncClient
 from pydantic import BaseModel
 
+from deep_research.api.main import create_app
 from deep_research.config import ResearchBudgets
 from deep_research.domain.plan import (
     CoverageLevel,
@@ -161,6 +163,30 @@ async def runtime_harness(tmp_path: Path):
             yield harness
         finally:
             await runtime.close()
+
+
+@pytest.fixture
+def api_app(runtime_harness):
+    return create_app(
+        runtime_harness.runtime,
+        cors_origins=["https://allowed.example"],
+    )
+
+
+@pytest.fixture
+async def async_client(api_app):
+    async with AsyncClient(
+        transport=ASGITransport(app=api_app),
+        base_url="http://test",
+    ) as client:
+        yield client
+
+
+@pytest.fixture
+async def running_thread_id(runtime_harness):
+    handle = await runtime_harness.runtime.start("Ambiguous topic")
+    await runtime_harness.wait_until(handle.run_id, RunStatus.WAITING_FOR_USER)
+    return handle.thread_id
 
 
 @pytest.fixture
