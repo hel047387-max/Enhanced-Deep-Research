@@ -59,6 +59,62 @@ A failed task does not erase successful siblings. Partial evidence produces a na
 
 The streaming endpoint emits typed envelopes without prompts, raw pages, credentials, or hidden reasoning:
 
+```mermaid
+sequenceDiagram
+    autonumber
+    participant UI as Vue UI / Store
+    participant API as FastAPI routes
+    participant RT as ResearchRuntime
+    participant PUB as EventPublisher
+    participant G as LangGraph
+    participant DB as SQLite
+
+    UI->>API: POST /api/v1/research/stream
+    API->>RT: start(query)
+    RT->>DB: Create run metadata
+    RT->>PUB: Open run and attach subscriber
+    RT-->>API: RunHandle(events)
+    API-->>UI: 200 text/event-stream
+
+    RT->>G: ainvoke(initial state, thread_id)
+    G->>DB: Persist checkpoints
+    G->>PUB: Publish typed progress events
+    PUB-->>API: Yield ResearchEvent
+    API-->>UI: data: JSON envelope
+    UI->>UI: Validate, deduplicate by sequence, update state
+
+    alt Clarification required
+        G->>PUB: clarification_required
+        PUB-->>API: ResearchEvent
+        API-->>UI: SSE event + done(waiting_for_user)
+        UI->>API: POST /{thread_id}/resume/stream
+        API->>RT: resume(thread_id, answer)
+        RT->>G: Command(resume=answer)
+    else Completed
+        G->>PUB: report_finalized
+        RT->>PUB: done(completed)
+        PUB-->>API: Terminal events
+        API-->>UI: Final SSE frames
+    else Failed or cancelled
+        RT->>PUB: error or run_cancelled
+        RT->>PUB: done(failed/cancelled)
+        PUB-->>API: Terminal events
+        API-->>UI: Final SSE frames
+    end
+
+    RT->>DB: Persist terminal run status
+    RT->>PUB: Close run channel
+
+    opt Refresh recovery (SSE has no replay)
+        UI->>API: GET /api/v1/research/{thread_id}
+        API->>RT: snapshot(thread_id)
+        RT->>DB: Read run metadata + graph checkpoint
+        API-->>UI: Latest ResearchSnapshot
+    end
+```
+
+Each run has one in-process subscriber and a bounded event queue. Events carry a monotonic `sequence`; the frontend validates their shape, ignores stale duplicates, and projects them into UI state. The live stream closes after `done`, while refresh recovery reads the latest committed snapshot instead of replaying SSE history.
+
 ```json
 {
   "type": "search_completed",
