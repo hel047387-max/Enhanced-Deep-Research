@@ -143,18 +143,21 @@ def validate_public_http_url(url: str) -> str:
 
 
 class SourceType(StrEnum):
+    """来源类型枚举。"""
     WEB = "web"
     OFFICIAL = "official"
     NEWS = "news"
 
 
 class Relevance(StrEnum):
+    """证据相关性等级。"""
     HIGH = "high"
     MEDIUM = "medium"
     LOW = "low"
 
 
 class Source(BaseModel, frozen=True):
+    """外部来源模型，负责保存并校验公开 HTTP 来源。"""
     source_id: str
     url: AnyHttpUrl
     canonical_url: AnyHttpUrl
@@ -172,6 +175,7 @@ class Source(BaseModel, frozen=True):
 
 
 class EvidenceItem(BaseModel, frozen=True):
+    """证据条目模型，关联来源与研究结论。"""
     evidence_id: str
     task_id: str
     source_id: str

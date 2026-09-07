@@ -36,6 +36,7 @@ async def clarify_request(
     state: dict[str, Any],
     model: StructuredModel,
 ) -> dict[str, Any]:
+    """判断问题是否需要澄清，并返回中断或继续执行的状态补丁。"""
     prompt = clarification_prompt(state.get("source_preferences"))
     raw = await model.ainvoke([SystemMessage(content=prompt), *_messages(state.get("messages", []))])
     decision = ClarificationDecision.model_validate(raw)
@@ -54,6 +55,7 @@ async def write_research_brief(
     state: dict[str, Any],
     model: StructuredModel,
 ) -> dict[str, ResearchBrief]:
+    """根据用户消息生成供 Planner 使用的结构化研究简报。"""
     prompt = research_brief_prompt(state.get("source_preferences"))
     raw = await model.ainvoke([SystemMessage(content=prompt), *_messages(state.get("messages", []))])
     return {"research_brief": ResearchBrief.model_validate(raw)}

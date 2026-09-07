@@ -15,14 +15,17 @@ RequestText = Annotated[
 
 
 class ResearchStartRequest(BaseModel):
+    """启动研究请求的 API 数据模型。"""
     query: RequestText
 
 
 class ResearchResumeRequest(BaseModel):
+    """恢复研究请求的 API 数据模型。"""
     answer: RequestText
 
 
 class ResearchSnapshotResponse(BaseModel):
+    """研究状态快照响应模型。"""
     run_id: str
     thread_id: str
     status: RunStatus
@@ -37,19 +40,23 @@ class ResearchSnapshotResponse(BaseModel):
 
 
 class ReportResponse(BaseModel):
+    """最终报告响应模型。"""
     run_id: str
     thread_id: str
     report: str
 
 
 class CancellationResponse(BaseModel):
+    """取消操作响应模型。"""
     thread_id: str
     status: Literal["accepted"] = "accepted"
 
 
 class HealthResponse(BaseModel):
+    """健康检查响应模型。"""
     status: Literal["ok"] = "ok"
 
 
 class ErrorResponse(BaseModel):
+    """统一错误响应模型。"""
     detail: str

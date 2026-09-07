@@ -69,7 +69,7 @@ async def test_planner_returns_three_to_five_unique_tasks(
 
 
 @pytest.mark.asyncio
-async def test_planner_rejects_too_few_tasks(brief, model_factory) -> None:
+async def test_planner_rejects_too_few_tasks(brief) -> None:
     invalid = {
         "strategy_summary": "Too narrow",
         "tasks": [
@@ -84,7 +84,10 @@ async def test_planner_rejects_too_few_tasks(brief, model_factory) -> None:
     }
 
     with pytest.raises(ValueError):
-        await plan_research({"research_brief": brief}, model_factory(invalid))
+        await plan_research(
+            {"research_brief": brief},
+            ScriptedStructuredModel([invalid, invalid]),
+        )
 
 
 @pytest.mark.asyncio
@@ -106,3 +109,60 @@ async def test_planner_truncates_valid_plan_to_configured_initial_task_budget(
     )
 
     assert list(result["tasks"]) == ["task-1", "task-2", "task-3"]
+
+
+@pytest.mark.asyncio
+async def test_planner_normalizes_model_generated_query_overflow(
+    brief, three_task_plan
+) -> None:
+    overflow = three_task_plan.model_dump()
+    for task in overflow["tasks"]:
+        task["search_queries"] = ["query one", "query two", "query three"]
+
+    result = await plan_research(
+        {"research_brief": brief},
+        ScriptedStructuredModel([overflow]),
+    )
+
+    assert [task.search_queries for task in result["tasks"].values()] == [
+        ["query one", "query two"],
+        ["query one", "query two"],
+        ["query one", "query two"],
+    ]
+
+
+@pytest.mark.asyncio
+async def test_planner_repairs_invalid_structure_once(
+    brief, three_task_plan
+) -> None:
+    invalid = three_task_plan.model_dump()
+    del invalid["tasks"][0]["objective"]
+    model = ScriptedStructuredModel([invalid, three_task_plan.model_dump()])
+
+    result = await plan_research({"research_brief": brief}, model)
+
+    assert len(result["tasks"]) == 3
+    assert len(model.calls) == 2
+    assert "Validation error" in model.calls[1][-1].content
+
+
+@pytest.mark.asyncio
+async def test_planner_normalizes_duplicate_ids_and_model_controlled_state(
+    brief, three_task_plan
+) -> None:
+    unsafe = three_task_plan.model_dump()
+    unsafe["tasks"][1]["task_id"] = unsafe["tasks"][0]["task_id"]
+    for task in unsafe["tasks"]:
+        task["status"] = "completed"
+        task["current_round"] = 2
+        task["error"] = "model supplied"
+
+    result = await plan_research(
+        {"research_brief": brief},
+        ScriptedStructuredModel([unsafe]),
+    )
+
+    assert list(result["tasks"]) == ["task-1", "task-1-2", "task-3"]
+    assert all(task.status.value == "pending" for task in result["tasks"].values())
+    assert all(task.current_round == 0 for task in result["tasks"].values())
+    assert all(task.error is None for task in result["tasks"].values())

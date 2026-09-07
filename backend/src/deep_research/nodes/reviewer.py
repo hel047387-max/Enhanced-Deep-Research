@@ -12,6 +12,7 @@ async def review_report(
     state: dict[str, Any],
     model: StructuredModel,
 ) -> dict[str, ReviewResult]:
+    """评估报告覆盖度、证据支撑和矛盾，并返回有界的评审动作。"""
     packet = {
         "draft": state["draft_report"].model_dump(mode="json"),
         "known_evidence_ids": sorted(state.get("evidence", {})),

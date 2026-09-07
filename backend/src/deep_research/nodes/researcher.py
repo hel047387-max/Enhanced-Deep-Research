@@ -115,6 +115,7 @@ def researcher_failure_patch(
 
 def prepare_queries_node(budgets: ResearchBudgets, event_sink: EventSink):
     async def prepare_queries(state: ResearcherState) -> dict[str, object]:
+        """根据任务目标生成并限制本轮搜索查询。"""
         patch: dict[str, object] = {}
         if not state.get("task_started_emitted", False):
             await event_sink.emit("task_started", {"task_id": state["task"].task_id})
@@ -156,6 +157,7 @@ def research_round_node(
     cancellation_checker: CancellationChecker,
 ):
     async def research_round(state: ResearcherState) -> dict[str, object]:
+        """执行搜索、提取证据并更新任务轮次。"""
         task = state["task"]
         brief = state["research_brief"]
         queries = state.get("queries", [])
@@ -296,6 +298,7 @@ def research_round_node(
 
 def complete_task_node(event_sink: EventSink):
     async def complete_task(state: ResearcherState) -> ResearcherOutput:
+        """汇总研究结果并生成任务完成或失败输出。"""
         gap = state.get("gap_assessment")
         if gap is None:
             gap = GapAssessment(

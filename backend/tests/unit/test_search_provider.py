@@ -1,4 +1,8 @@
+import sys
+from types import SimpleNamespace
+
 import pytest
+from pydantic import BaseModel
 
 from deep_research.config import Settings
 from deep_research.llm import create_structured_model
@@ -58,3 +62,66 @@ def test_missing_tavily_dependency_has_actionable_startup_error(monkeypatch) -> 
 
     with pytest.raises(RuntimeError, match="install.*tavily-python"):
         TavilySearchProvider.from_api_key("test-key")
+
+
+class _Probe(BaseModel):
+    ok: bool
+
+
+@pytest.mark.asyncio
+async def test_deepseek_structured_model_disables_thinking_and_repairs_parse_once(
+    monkeypatch,
+) -> None:
+    responses = [
+        {"raw": "invalid output", "parsed": None, "parsing_error": ValueError("bad JSON")},
+        {"raw": object(), "parsed": {"ok": True}, "parsing_error": None},
+    ]
+
+    class FakeRunnable:
+        def __init__(self) -> None:
+            self.calls = []
+
+        async def ainvoke(self, messages):
+            self.calls.append(messages)
+            return responses.pop(0)
+
+    runnable = FakeRunnable()
+
+    class FakeChatOpenAI:
+        kwargs = None
+        structured_kwargs = None
+
+        def __init__(self, **kwargs) -> None:
+            type(self).kwargs = kwargs
+
+        def with_structured_output(self, schema, **kwargs):
+            type(self).structured_kwargs = kwargs
+            return runnable
+
+    monkeypatch.setitem(
+        sys.modules,
+        "langchain_openai",
+        SimpleNamespace(ChatOpenAI=FakeChatOpenAI),
+    )
+    settings = Settings(
+        llm_provider="deepseek",
+        llm_model="deepseek-v4-flash",
+        llm_api_key="test-key",
+        llm_base_url="https://api.deepseek.com",
+    )
+
+    model = create_structured_model(settings, _Probe)
+    result = await model.ainvoke([])
+
+    assert result == {"ok": True}
+    assert len(runnable.calls) == 2
+    assert "Correct the previous structured output" in runnable.calls[1][-1].content
+    assert "invalid output" in runnable.calls[1][-1].content
+    assert FakeChatOpenAI.kwargs["temperature"] == 0
+    assert FakeChatOpenAI.kwargs["extra_body"] == {
+        "thinking": {"type": "disabled"}
+    }
+    assert FakeChatOpenAI.structured_kwargs == {
+        "method": "function_calling",
+        "include_raw": True,
+    }

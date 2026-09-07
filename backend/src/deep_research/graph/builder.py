@@ -39,6 +39,7 @@ from deep_research.tools.search import SearchProvider
 
 @dataclass(frozen=True)
 class WorkflowDependencies:
+    """保存构建研究图所需的模型、工具、预算和运行时回调。"""
     clarifier_model: StructuredModel
     planner_model: StructuredModel
     evidence_model: StructuredModel
@@ -59,6 +60,7 @@ def build_researcher_graph(
     event_sink: EventSink,
     cancellation_checker: CancellationChecker,
 ):
+    """构建单个 Researcher 的查询、搜索、缺口分析和完成子图。"""
     builder = StateGraph(
         ResearcherState,
         input_schema=ResearcherInput,
@@ -127,6 +129,7 @@ def build_supervisor_graph(
     coverage_model: StructuredModel,
     budgets: ResearchBudgets,
 ):
+    """构建 Supervisor 子图，负责派发研究任务和全局覆盖检查。"""
     builder = StateGraph(SupervisorState)
     builder.add_node("prepare_dispatch", prepare_dispatch_node(budgets))
     builder.add_node("research_task", research_task_node(researcher_runner))
@@ -164,6 +167,7 @@ def build_supervisor_graph(
 def build_research_graph_builder(
     deps: WorkflowDependencies,
 ) -> StateGraph:
+    """组装顶层研究图，并连接澄清、规划、研究、写作、评审和最终化。"""
     researcher = build_researcher_graph(
         search_provider=deps.search_provider,
         evidence_model=deps.evidence_model,
@@ -474,4 +478,5 @@ def build_research_graph(
     deps: WorkflowDependencies,
     checkpointer: BaseCheckpointSaver | None = None,
 ) -> CompiledStateGraph:
+    """编译顶层 StateGraph，可选注入 checkpoint 以支持恢复。"""
     return build_research_graph_builder(deps).compile(checkpointer=checkpointer)

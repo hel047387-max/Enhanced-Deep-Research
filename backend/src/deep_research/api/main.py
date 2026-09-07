@@ -33,6 +33,7 @@ from deep_research.tools.search import TavilySearchProvider
 
 
 class _PromptRouter:
+    """根据提示词标记把模型调用路由到匹配的固定响应。"""
     def __init__(self, marker: str, matched: Any, fallback: Any) -> None:
         self._marker = marker
         self._matched = matched
@@ -70,6 +71,7 @@ def _production_dependencies(
 
 
 def _origins(settings: Settings, override: list[str] | None) -> list[str]:
+    """解析 CORS 允许的来源列表。"""
     origins = override or [
         origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()
     ]

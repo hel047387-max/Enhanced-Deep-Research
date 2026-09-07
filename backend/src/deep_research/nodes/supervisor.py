@@ -27,6 +27,7 @@ class SupervisorState(ResearchState, total=False):
 
 def prepare_dispatch_node(budgets: ResearchBudgets):
     async def prepare_dispatch(state: SupervisorState) -> dict[str, object]:
+        """按并发限制和全局查询预算选择下一批待执行任务。"""
         pending = sorted(
             task_id
             for task_id, task in state.get("tasks", {}).items()
@@ -57,6 +58,7 @@ def prepare_dispatch_node(budgets: ResearchBudgets):
 
 def research_task_node(researcher_runner: ResearcherRunner):
     async def research_task(state: dict[str, object]) -> dict[str, object]:
+        """运行一个研究任务，并把结果合并回共享状态。"""
         output = await researcher_runner(state)
         task = output["updated_task"]
         gap = output["gap_assessment"]
@@ -77,6 +79,7 @@ def assess_coverage_node(
     budgets: ResearchBudgets,
 ):
     async def assess_coverage(state: SupervisorState) -> dict[str, object]:
+        """评估整体覆盖度，必要时生成针对明确缺口的补充任务。"""
         packet = {
             "brief": state["research_brief"].model_dump(),
             "tasks": {

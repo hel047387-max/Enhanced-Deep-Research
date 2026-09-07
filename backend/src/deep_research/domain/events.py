@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class EventType(StrEnum):
+    """SSE研究流程事件类型枚举。"""
     RUN_STARTED = "run_started"
     CLARIFICATION_REQUIRED = "clarification_required"
     RESEARCH_BRIEF_CREATED = "research_brief_created"

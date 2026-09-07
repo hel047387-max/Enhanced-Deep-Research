@@ -12,6 +12,7 @@ async def write_report(
     state: dict[str, Any],
     model: StructuredModel,
 ) -> dict[str, ReportDraft]:
+    """基于结构化 Brief、任务和证据生成可供评审的报告草稿。"""
     review = state.get("review_result")
     packet = {
         "research_brief": state["research_brief"].model_dump(),

@@ -13,6 +13,7 @@ def assess_gap_node(
     cancellation_checker: CancellationChecker,
 ):
     async def assess_gap(state: ResearcherState) -> dict[str, object]:
+        """分析当前任务证据覆盖度，并建议是否进入下一轮搜索。"""
         cancellation_checker.raise_if_cancelled()
         try:
             raw = await gap_model.ainvoke(

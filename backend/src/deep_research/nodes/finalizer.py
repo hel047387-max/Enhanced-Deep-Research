@@ -43,6 +43,7 @@ def _remove_invalid_associations(
 
 
 async def finalize_report(state: ResearchState) -> dict[str, object]:
+    """校验 Evidence 关联并确定性渲染最终 Markdown 报告。"""
     draft = state["draft_report"]
     if draft is None:
         raise ValueError("cannot finalize without a draft")

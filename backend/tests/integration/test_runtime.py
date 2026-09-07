@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 from dataclasses import replace
 from pathlib import Path
 
@@ -208,3 +209,34 @@ async def test_checkpoint_failure_is_fatal_and_sanitized(
     assert terminal.payload["retryable"] is False
     assert "api_key" not in json.dumps(terminal.payload).lower()
     assert metadata.last_error == "Research checkpoint persistence failed."
+
+
+@pytest.mark.asyncio
+async def test_runtime_logs_internal_execution_exception(
+    tmp_path, caplog
+) -> None:
+    class FailingGraph:
+        async def ainvoke(self, *_args, **_kwargs):
+            raise RuntimeError("provider exploded")
+
+    database = tmp_path / "runtime-error.sqlite"
+    store = RunStore(database)
+    await store.initialize()
+    runtime = ResearchRuntime(
+        FailingGraph(),
+        store,
+        EventPublisher(),
+        CancellationRegistry(),
+    )
+
+    with caplog.at_level(logging.ERROR, logger="deep_research.services.runtime"):
+        handle = await runtime.start("A complete question")
+        async for _event in handle.events:
+            pass
+        metadata = await store.get_run(handle.run_id)
+
+    await runtime.close()
+    assert metadata is not None
+    assert metadata.status is RunStatus.FAILED
+    assert "Research execution failed" in caplog.text
+    assert "provider exploded" in caplog.text

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import re
 from collections.abc import AsyncIterator, Mapping
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
@@ -22,6 +24,16 @@ from deep_research.services.cancellation import (
     ResearchCancelled,
 )
 from deep_research.services.event_stream import EventPublisher
+
+logger = logging.getLogger(__name__)
+_SENSITIVE_VALUE = re.compile(
+    r"(?i)\b(api[_-]?key|authorization|token|secret)\s*[:=]\s*\S+"
+)
+
+
+def _safe_exception_message(exc: Exception) -> str:
+    return _SENSITIVE_VALUE.sub(r"\1=[REDACTED]", str(exc))
+
 
 
 class InvalidResumeState(ValueError):
@@ -150,6 +162,7 @@ class ResearchRuntime:
         self._streams: dict[str, AsyncIterator[ResearchEvent]] = {}
 
     async def start(self, query: str) -> RunHandle:
+        """创建研究线程并异步启动首次执行。"""
         thread_id = str(uuid4())
         run_id = str(uuid4())
         self._cancellation.clear(thread_id)
@@ -157,6 +170,7 @@ class ResearchRuntime:
         return self._launch(run_id, thread_id, _initial_state(run_id, thread_id, query))
 
     async def resume(self, thread_id: str, answer: str) -> RunHandle:
+        """提交用户澄清回答并恢复暂停的研究线程。"""
         latest = await self._run_store.get_latest_for_thread(thread_id)
         if latest is None:
             raise ResearchThreadNotFound(thread_id)
@@ -170,6 +184,7 @@ class ResearchRuntime:
         return self._launch(run_id, thread_id, graph_input)
 
     async def snapshot(self, thread_id: str) -> ResearchSnapshot:
+        """读取线程当前状态快照。"""
         latest = await self._run_store.get_latest_for_thread(thread_id)
         if latest is None:
             raise ResearchThreadNotFound(thread_id)
@@ -190,6 +205,7 @@ class ResearchRuntime:
         )
 
     async def cancel(self, thread_id: str) -> None:
+        """请求取消指定研究线程。"""
         latest = await self._run_store.get_latest_for_thread(thread_id)
         if latest is None:
             raise ResearchThreadNotFound(thread_id)
@@ -302,6 +318,12 @@ class ResearchRuntime:
             terminal_status = RunStatus.CANCELLED
             raise
         except Exception as exc:  # noqa: BLE001 - serialize one stable public error
+            logger.error(
+                "Research execution failed: %s: %s",
+                type(exc).__name__,
+                _safe_exception_message(exc),
+                extra={"run_id": run_id, "thread_id": thread_id},
+            )
             if _is_checkpoint_failure(exc):
                 error = ResearchError(
                     error_code="checkpoint_failed",
