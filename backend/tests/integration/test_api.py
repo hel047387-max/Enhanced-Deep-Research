@@ -2,6 +2,7 @@ import json
 
 import pytest
 
+from deep_research.api.literature_routes import router as literature_router
 from deep_research.api.routes import health_router, router
 
 
@@ -100,7 +101,7 @@ async def test_cors_uses_the_explicit_allowlist(async_client) -> None:
 def test_application_exposes_only_the_approved_endpoints() -> None:
     routes = {
         (method, route.path)
-        for route in [*router.routes, *health_router.routes]
+        for route in [*router.routes, *literature_router.routes, *health_router.routes]
         for method in getattr(route, "methods", set())
     }
 
@@ -110,5 +111,8 @@ def test_application_exposes_only_the_approved_endpoints() -> None:
         ("GET", "/api/v1/research/{thread_id}"),
         ("GET", "/api/v1/research/{thread_id}/report"),
         ("POST", "/api/v1/research/{thread_id}/cancel"),
+        ("POST", "/api/v1/literature/documents"),
+        ("POST", "/api/v1/literature/search"),
+        ("DELETE", "/api/v1/literature/documents/{document_id}"),
         ("GET", "/health"),
     }

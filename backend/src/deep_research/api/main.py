@@ -7,6 +7,12 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from deep_research.api.literature_routes import (
+    LiteratureApplication,
+)
+from deep_research.api.literature_routes import (
+    router as literature_router,
+)
 from deep_research.api.routes import health_router, router
 from deep_research.config import Settings, get_settings
 from deep_research.domain.plan import (
@@ -70,6 +76,71 @@ def _production_dependencies(
     )
 
 
+def _production_literature_application(
+    settings: Settings,
+) -> tuple[LiteratureApplication, Any]:
+    try:
+        from qdrant_client import AsyncQdrantClient
+    except ImportError:
+        raise RuntimeError(
+            "Literature RAG requires the optional 'rag' dependencies."
+        ) from None
+
+    from deep_research.application.document_processor import DocumentProcessor
+    from deep_research.application.query_enhancer import (
+        ExpandedQueries,
+        HypotheticalPassage,
+        QueryEnhancer,
+    )
+    from deep_research.application.query_router import QueryRouter
+    from deep_research.application.retriever import LiteratureRetriever
+    from deep_research.domain.literature import QueryDecision
+    from deep_research.infrastructure.cross_encoder_reranker import (
+        SentenceTransformerReranker,
+    )
+    from deep_research.infrastructure.docling_parser import DoclingParser
+    from deep_research.infrastructure.embedding_provider import (
+        SentenceTransformerEmbeddingProvider,
+    )
+    from deep_research.infrastructure.qdrant_index import QdrantLiteratureIndex
+
+    client = AsyncQdrantClient(
+        url=settings.qdrant_url,
+        api_key=settings.qdrant_api_key,
+    )
+    index = QdrantLiteratureIndex(client, settings.qdrant_collection)
+    embedder = SentenceTransformerEmbeddingProvider.from_model_name(
+        settings.rag_embedding_model
+    )
+    parser = DoclingParser.from_model_name(
+        settings.rag_embedding_model,
+        max_tokens=settings.rag_chunk_max_tokens,
+    )
+    reranker = SentenceTransformerReranker.from_model_name(
+        settings.rag_reranker_model
+    )
+    router = QueryRouter(create_structured_model(settings, QueryDecision))
+    enhancer = QueryEnhancer(
+        create_structured_model(settings, ExpandedQueries),
+        create_structured_model(settings, HypotheticalPassage),
+    )
+    retriever = LiteratureRetriever(
+        router,
+        enhancer,
+        embedder,
+        index,
+        reranker,
+        candidate_limit=settings.rag_candidate_limit,
+        top_k=settings.rag_top_k,
+    )
+    return (
+        LiteratureApplication(
+            processor=DocumentProcessor(parser, embedder, index),
+            retriever=retriever,
+        ),
+        client,
+    )
+
 def _origins(settings: Settings, override: list[str] | None) -> list[str]:
     """解析 CORS 允许的来源列表。"""
     origins = override or [
@@ -85,14 +156,27 @@ def create_app(
     *,
     cors_origins: list[str] | None = None,
     settings: Settings | None = None,
+    literature_application: LiteratureApplication | None = None,
 ) -> FastAPI:
     resolved_settings = settings or get_settings()
 
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
+        owned_literature_client = None
+        if literature_application is not None:
+            application.state.literature_application = literature_application
+        elif resolved_settings.rag_enabled:
+            (
+                application.state.literature_application,
+                owned_literature_client,
+            ) = _production_literature_application(resolved_settings)
         if runtime is not None:
             application.state.runtime = runtime
-            yield
+            try:
+                yield
+            finally:
+                if owned_literature_client is not None:
+                    await owned_literature_client.close()
             return
 
         store = RunStore(resolved_settings.checkpoint_db_path)
@@ -119,6 +203,8 @@ def create_app(
                 yield
             finally:
                 await owned_runtime.close()
+                if owned_literature_client is not None:
+                    await owned_literature_client.close()
 
     application = FastAPI(
         title="Deep Research API",
@@ -127,17 +213,21 @@ def create_app(
         openapi_url=None,
         lifespan=lifespan,
     )
-    if runtime is not None:
-        application.state.runtime = runtime
     application.add_middleware(
         CORSMiddleware,
         allow_origins=_origins(resolved_settings, cors_origins),
         allow_credentials=True,
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "DELETE"],
         allow_headers=["Content-Type"],
     )
     application.include_router(router)
+    application.include_router(literature_router)
     application.include_router(health_router)
+    application.state.rag_max_upload_bytes = resolved_settings.rag_max_upload_bytes
+    if runtime is not None:
+        application.state.runtime = runtime
+    if literature_application is not None:
+        application.state.literature_application = literature_application
     return application
 
 
