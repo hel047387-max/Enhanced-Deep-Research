@@ -1,6 +1,6 @@
-﻿# Literature RAG Implementation Plan
+# Literature RAG Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (- [ ]) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (- [x]) syntax for tracking.
 
 **Goal:** Add a single-vector Qdrant literature RAG pipeline with Docling ingestion, query enhancement, reranking, grounded answers, and optional Deep Research evidence integration.
 
@@ -74,7 +74,7 @@
 - Produces DocumentParser, EmbeddingProvider, LiteratureIndex, and CandidateReranker protocols.
 - Produces bounded rag_enabled, qdrant_url, qdrant_api_key, qdrant_collection, rag_embedding_model, rag_reranker_model, rag_chunk_max_tokens, rag_candidate_limit, rag_top_k, rag_context_max_chars, and rag_max_upload_bytes settings.
 
-- [ ] **Step 1: Write failing model and settings tests**
+- [x] **Step 1: Write failing model and settings tests**
 
 ~~~python
 def test_searchable_unit_builds_embedding_text_and_payload() -> None:
@@ -88,13 +88,13 @@ def test_rag_settings_reject_invalid_limits() -> None:
         Settings(rag_top_k=0)
 ~~~
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run: python -m pytest tests/unit/test_literature_models.py tests/unit/test_config.py -q
 
 Expected: FAIL because literature contracts and settings are absent.
 
-- [ ] **Step 3: Implement immutable models and exact protocols**
+- [x] **Step 3: Implement immutable models and exact protocols**
 
 ~~~python
 class SearchableUnit(BaseModel, frozen=True):
@@ -128,7 +128,7 @@ class SearchableUnit(BaseModel, frozen=True):
 
 Protocols expose parse, embed_documents, embed_query, ensure_collection, upsert, search, retrieve, delete_document, and rerank. SearchableUnit.to_payload returns model_dump(mode="json").
 
-- [ ] **Step 4: Add optional dependencies**
+- [x] **Step 4: Add optional dependencies**
 
 ~~~toml
 rag = [
@@ -140,13 +140,13 @@ rag = [
 ]
 ~~~
 
-- [ ] **Step 5: Run GREEN**
+- [x] **Step 5: Run GREEN**
 
 Run: python -m pytest tests/unit/test_literature_models.py tests/unit/test_config.py -q
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ~~~text
 git add backend/pyproject.toml backend/src/deep_research/config.py backend/src/deep_research/domain/literature.py backend/tests/unit/test_config.py backend/tests/unit/test_literature_models.py
@@ -170,7 +170,7 @@ git commit -m "feat: define literature RAG contracts"
 - Consumes Task 1 contracts.
 - Produces DoclingParser, SentenceTransformerEmbeddingProvider, QdrantLiteratureIndex, and SentenceTransformerReranker.
 
-- [ ] **Step 1: Write failing adapter tests**
+- [x] **Step 1: Write failing adapter tests**
 
 ~~~python
 @pytest.mark.asyncio
@@ -190,17 +190,17 @@ def test_missing_payload_text_is_rejected() -> None:
 
 Parser tests prove title, heading, page, content type, text, and neighbor IDs survive conversion.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run: python -m pytest tests/unit/test_literature_processing.py tests/unit/test_literature_retrieval.py -q
 
 Expected: FAIL because adapters are absent.
 
-- [ ] **Step 3: Implement Docling adapter**
+- [x] **Step 3: Implement Docling adapter**
 
 Use DocumentConverter.convert on a temporary file and HybridChunker with a HuggingFaceTokenizer configured for the embedding model. Convert chunk.text, chunk.meta.headings, page provenance, and label into SearchableUnit. Generate ordered unit UUIDs and then assign neighbor IDs. Empty parsed text raises EmptyDocument; unsupported input raises UnsupportedDocument. Always remove the temporary file.
 
-- [ ] **Step 4: Implement one embedding adapter**
+- [x] **Step 4: Implement one embedding adapter**
 
 ~~~python
 async def embed_documents(self, texts: list[str]) -> list[list[float]]:
@@ -218,17 +218,17 @@ async def embed_query(self, text: str) -> list[float]:
 
 The same provider instance implements both calls.
 
-- [ ] **Step 5: Implement Qdrant and reranker adapters**
+- [x] **Step 5: Implement Qdrant and reranker adapters**
 
 Use AsyncQdrantClient, one cosine VectorParams collection, PointStruct with the full payload, query_points for retrieval, retrieve for neighbors, and a document_id filter for deletion. Every returned payload passes through SearchableUnit.model_validate. CrossEncoder.predict scores query/unit-text pairs and returns descending candidates.
 
-- [ ] **Step 6: Run GREEN**
+- [x] **Step 6: Run GREEN**
 
 Run: python -m pytest tests/unit/test_literature_processing.py tests/unit/test_literature_retrieval.py -q
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ~~~text
 git add backend/src/deep_research/infrastructure backend/tests/unit/test_literature_processing.py backend/tests/unit/test_literature_retrieval.py
@@ -249,7 +249,7 @@ git commit -m "feat: add literature vector adapters"
 - Consumes DocumentParser, EmbeddingProvider, and LiteratureIndex.
 - Produces DocumentProcessor.ingest and DocumentProcessor.delete.
 
-- [ ] **Step 1: Write failing orchestration tests**
+- [x] **Step 1: Write failing orchestration tests**
 
 ~~~python
 @pytest.mark.asyncio
@@ -273,23 +273,23 @@ async def test_qdrant_failure_remains_an_error() -> None:
         await processor.ingest("paper.pdf", b"%PDF", metadata)
 ~~~
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run: python -m pytest tests/unit/test_literature_processing.py -q
 
 Expected: FAIL because DocumentProcessor is absent.
 
-- [ ] **Step 3: Implement minimal orchestration**
+- [x] **Step 3: Implement minimal orchestration**
 
 Parse, reject an empty unit list, call embed_documents with every embedding_text, require the vector count to equal the unit count, ensure the collection, upsert once, and return document ID plus unit count and extracted metadata. Delete delegates to the index. Do not add retries, SQLite writes, status, hashes, or versions.
 
-- [ ] **Step 4: Run GREEN**
+- [x] **Step 4: Run GREEN**
 
 Run: python -m pytest tests/unit/test_literature_processing.py -q
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ~~~text
 git add backend/src/deep_research/application backend/tests/fakes.py backend/tests/unit/test_literature_processing.py
@@ -312,7 +312,7 @@ git commit -m "feat: add synchronous literature ingestion"
 - Consumes StructuredModel, EmbeddingProvider, LiteratureIndex, and CandidateReranker.
 - Produces QueryRouter.route, QueryEnhancer.expand, LiteratureRetriever.search, and ContextBuilder.build.
 
-- [ ] **Step 1: Write failing route and retrieval tests**
+- [x] **Step 1: Write failing route and retrieval tests**
 
 ~~~python
 @pytest.mark.asyncio
@@ -337,13 +337,13 @@ async def test_context_adds_existing_neighbors_once() -> None:
     assert str(neighbor.unit_id) in context.text
 ~~~
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run: python -m pytest tests/unit/test_literature_retrieval.py -q
 
 Expected: FAIL because application retrieval modules are absent.
 
-- [ ] **Step 3: Implement structured routing outputs**
+- [x] **Step 3: Implement structured routing outputs**
 
 ~~~python
 class QueryDecision(BaseModel, frozen=True):
@@ -359,21 +359,21 @@ class HypotheticalPassage(BaseModel, frozen=True):
 
 The prompt states generated queries and hypothetical passages are retrieval keys only.
 
-- [ ] **Step 4: Implement retrieval**
+- [x] **Step 4: Implement retrieval**
 
 For every routed query, call embed_query and Qdrant search with candidate_limit. Deduplicate by unit_id while retaining the highest similarity score. Rerank at most candidate_limit items and return top_k. Direct route uses the original query; MQE uses no more than three outputs; HyDE uses one generated passage.
 
-- [ ] **Step 5: Implement context construction**
+- [x] **Step 5: Implement context construction**
 
 Fetch previous and next unit IDs for selected units, preserve primary rank before neighbors, deduplicate unit IDs, and stop before rag_context_max_chars. Serialize each block with unit ID, title, section, pages, and text.
 
-- [ ] **Step 6: Run GREEN**
+- [x] **Step 6: Run GREEN**
 
 Run: python -m pytest tests/unit/test_literature_retrieval.py -q
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ~~~text
 git add backend/src/deep_research/application backend/src/deep_research/prompts/literature.py backend/tests/unit/test_literature_retrieval.py
@@ -396,7 +396,7 @@ git commit -m "feat: add literature retrieval pipeline"
 - Produces POST documents, POST search, and DELETE documents by document ID.
 - Produces application.state.literature_application with injectable test support.
 
-- [ ] **Step 1: Write failing API tests**
+- [x] **Step 1: Write failing API tests**
 
 ~~~python
 @pytest.mark.asyncio
@@ -428,27 +428,27 @@ async def test_oversized_upload_stops_before_parsing(async_client) -> None:
     assert fake_parser.calls == []
 ~~~
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run: python -m pytest tests/integration/test_literature_api.py tests/integration/test_api.py -q
 
 Expected: FAIL because literature routes are absent.
 
-- [ ] **Step 3: Add request and response contracts**
+- [x] **Step 3: Add request and response contracts**
 
 Upload accepts a file and optional metadata_json validated as LiteratureMetadata. Search accepts query, limit, document IDs, tags, language, and year range. Map unsupported input to 415, empty documents to 422, missing RAG application to 503, and infrastructure failure to 502.
 
-- [ ] **Step 4: Wire production adapters**
+- [x] **Step 4: Wire production adapters**
 
 When rag_enabled is true, the lifespan creates one shared embedding provider for Docling tokenization, ingestion, and queries; one AsyncQdrantClient; one index; one reranker; and the application services. Include the router unconditionally so disabled mode returns 503 instead of removing endpoints.
 
-- [ ] **Step 5: Run GREEN**
+- [x] **Step 5: Run GREEN**
 
 Run: python -m pytest tests/integration/test_literature_api.py tests/integration/test_api.py -q
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ~~~text
 git add backend/src/deep_research/api backend/tests/integration/test_api.py backend/tests/integration/test_literature_api.py
@@ -471,7 +471,7 @@ git commit -m "feat: expose literature ingestion and search APIs"
 - Consumes LiteratureRetriever, ContextBuilder, and StructuredModel.
 - Produces AnswerService.answer and POST /api/v1/literature/answer.
 
-- [ ] **Step 1: Write failing citation tests**
+- [x] **Step 1: Write failing citation tests**
 
 ~~~python
 @pytest.mark.asyncio
@@ -499,27 +499,27 @@ async def test_answer_reports_insufficient_evidence() -> None:
         await service.answer(request)
 ~~~
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run: python -m pytest tests/unit/test_literature_answers.py tests/integration/test_literature_api.py -q
 
 Expected: FAIL because AnswerService and the endpoint are absent.
 
-- [ ] **Step 3: Implement grounded generation**
+- [x] **Step 3: Implement grounded generation**
 
 The prompt contains only ContextBuilder output and requires cited unit IDs. Parse LiteratureAnswerDraft, derive allowed IDs from the actual context, reject any unknown ID, and build LiteratureCitation values from cited payloads. Do not return generated text after citation validation fails.
 
-- [ ] **Step 4: Add the endpoint**
+- [x] **Step 4: Add the endpoint**
 
 Map insufficient evidence to HTTP 409 and invalid model citations to HTTP 502.
 
-- [ ] **Step 5: Run GREEN**
+- [x] **Step 5: Run GREEN**
 
 Run: python -m pytest tests/unit/test_literature_answers.py tests/integration/test_literature_api.py -q
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ~~~text
 git add backend/src/deep_research/application/answer_service.py backend/src/deep_research/api/literature_routes.py backend/src/deep_research/api/main.py backend/src/deep_research/prompts/literature.py backend/tests/unit/test_literature_answers.py backend/tests/integration/test_literature_api.py
@@ -553,7 +553,7 @@ git commit -m "feat: add grounded literature answers"
 - Consumes LiteratureRetriever and the existing evidence-extraction model.
 - Produces LiteratureSource, EvidenceSource, ResearchAdapter.search, and use_literature request/state flow.
 
-- [ ] **Step 1: Write failing source and integration tests**
+- [x] **Step 1: Write failing source and integration tests**
 
 ~~~python
 def test_literature_source_needs_no_url() -> None:
@@ -587,31 +587,31 @@ async def test_researcher_admits_literature_as_current_run_evidence() -> None:
     )
 ~~~
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run: python -m pytest tests/integration/test_literature_research.py tests/unit/test_security.py tests/unit/test_citations.py -q
 
 Expected: FAIL because literature sources and graph wiring are absent.
 
-- [ ] **Step 3: Add the source union**
+- [x] **Step 3: Add the source union**
 
 Add source_kind with default web to the existing Source for checkpoint compatibility. Add LiteratureSource with document ID, unit ID, title, authors, year, DOI, heading, pages, and retrieval time, with no URL. Define EvidenceSource as Source or LiteratureSource. Update reducers, state, snapshots, memory archives, and citation rendering to accept the union.
 
-- [ ] **Step 4: Implement ResearchAdapter**
+- [x] **Step 4: Implement ResearchAdapter**
 
 For each Researcher query, retrieve local units, create LiteratureSource values, run the existing evidence extraction model over unit text, and build EvidenceItem values with title, heading, and page context. Only these current-run evidence items enter Writer.
 
-- [ ] **Step 5: Wire use_literature**
+- [x] **Step 5: Wire use_literature**
 
 Add use_literature to start request, runtime initial state, WorkflowDependencies, Researcher input, and frontend request. Default it to false. When true, retrieve literature before web search. If RAG is unavailable, return a visible literature_unavailable ResearchError rather than pretending it was searched.
 
-- [ ] **Step 6: Run focused and graph regression tests**
+- [x] **Step 6: Run focused and graph regression tests**
 
 Run: python -m pytest tests/integration/test_literature_research.py tests/integration/test_research_graph.py tests/integration/test_researcher_graph.py tests/unit/test_security.py tests/unit/test_citations.py tests/unit/test_reducers.py -q
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ~~~text
 git add backend/src/deep_research/application/research_adapter.py backend/src/deep_research/domain/evidence.py backend/src/deep_research/services/evidence_store.py backend/src/deep_research/state backend/src/deep_research/graph/builder.py backend/src/deep_research/nodes/researcher.py backend/src/deep_research/services/citations.py backend/src/deep_research/persistence/memory_store.py backend/src/deep_research/services/runtime.py backend/src/deep_research/api backend/tests
@@ -639,7 +639,7 @@ git commit -m "feat: use literature evidence in deep research"
 - Consumes Task 5 and Task 6 HTTP contracts.
 - Produces upload, search, answer, citations, delete, and use_literature controls.
 
-- [ ] **Step 1: Write failing UI tests**
+- [x] **Step 1: Write failing UI tests**
 
 ~~~typescript
 it("uploads a document and shows indexed unit count", async () => {
@@ -662,21 +662,21 @@ it("renders answer citations with pages", async () => {
 
 Add a ResearchForm test proving use_literature is emitted and sent.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run: npm run test:run -- src/components/LiteraturePanel.test.ts src/App.test.ts
 
 Expected: FAIL because the new UI and API are absent.
 
-- [ ] **Step 3: Implement typed API and compact panel**
+- [x] **Step 3: Implement typed API and compact panel**
 
 The panel contains file upload with metadata, semantic search, result snippets, question answering, citation display, delete, busy states, and explicit errors. It has no ingestion-progress UI because processing is synchronous.
 
-- [ ] **Step 4: Add the research checkbox**
+- [x] **Step 4: Add the research checkbox**
 
 Add Use literature to ResearchForm and send use_literature from startResearch. Keep the default false.
 
-- [ ] **Step 5: Run GREEN and build**
+- [x] **Step 5: Run GREEN and build**
 
 Run: npm run test:run
 
@@ -686,7 +686,7 @@ Run: npm run build
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ~~~text
 git add frontend/src
@@ -706,11 +706,11 @@ git commit -m "feat: add literature RAG interface"
 - Consumes all shipped settings and commands.
 - Produces reproducible setup and verification instructions.
 
-- [ ] **Step 1: Document setup**
+- [x] **Step 1: Document setup**
 
 Add installation with the rag extra, a pinned Qdrant container command, environment variables, model download behavior, upload/search/answer examples, use_literature, and the fact that a failed synchronous import must be submitted again.
 
-- [ ] **Step 2: Run backend quality gates**
+- [x] **Step 2: Run backend quality gates**
 
 Run: python -m ruff check src tests
 
@@ -720,7 +720,7 @@ Run: python -m pytest -q
 
 Expected: PASS.
 
-- [ ] **Step 3: Run frontend quality gates**
+- [x] **Step 3: Run frontend quality gates**
 
 Run: npm run test:run
 
@@ -730,7 +730,7 @@ Run: npm run build
 
 Expected: PASS.
 
-- [ ] **Step 4: Verify architecture constraints**
+- [x] **Step 4: Verify architecture constraints**
 
 Run:
 
@@ -743,7 +743,7 @@ Expected: no matches in production RAG code.
 
 Inspect one integration-test Qdrant point and confirm it has exactly one vector and a payload containing title, authors, publication year, DOI, language, tags, heading path, pages, content type, neighbor IDs, and text.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ~~~text
 git add README.md docs/superpowers/specs/2026-09-23-literature-rag-design.md docs/superpowers/plans/2026-09-23-literature-rag-implementation.md
@@ -751,3 +751,13 @@ git commit -m "docs: document literature RAG setup"
 ~~~
 
 
+
+## Verification result
+
+Completed on 2026-09-23:
+
+- Backend: `python -m ruff check src tests evals` passed.
+- Backend: `python -m pytest -q` passed with 236 tests.
+- Frontend: `npm run test:run` passed with 31 tests.
+- Frontend: `npm run build` passed.
+- Production RAG code contains no sparse vectors, ingestion-job tables, version tables, or index generations.

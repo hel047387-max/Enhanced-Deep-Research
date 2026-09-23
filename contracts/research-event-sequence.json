@@ -20,7 +20,9 @@
         "time_range": "2024-2026",
         "comparison_dimensions": [],
         "expected_output": "Structured Markdown research report",
-        "source_preferences": ["official sources"],
+        "source_preferences": [
+          "official sources"
+        ],
         "assumptions": [],
         "exclusions": []
       }
@@ -39,8 +41,12 @@
           "task_id": "task-1",
           "title": "Dimension 1",
           "objective": "Research dimension 1",
-          "completion_criteria": ["Find grounded evidence"],
-          "search_queries": ["query 1"],
+          "completion_criteria": [
+            "Find grounded evidence"
+          ],
+          "search_queries": [
+            "query 1"
+          ],
           "status": "pending",
           "current_round": 0,
           "parent_task_id": null,
@@ -59,11 +65,14 @@
     "payload": {
       "task_id": "task-1",
       "round": 1,
-      "evidence_ids": ["evidence-1"],
+      "evidence_ids": [
+        "evidence-1"
+      ],
       "count": 1,
       "sources": [
         {
           "source_id": "source-1",
+          "source_kind": "web",
           "url": "https://example.com/result",
           "canonical_url": "https://example.com/result",
           "title": "Official result",
@@ -114,7 +123,9 @@
     "thread_id": "thread-contract",
     "sequence": 6,
     "timestamp": "2026-08-26T00:00:05Z",
-    "payload": {"report": "# Research report\n\nSupported result. [1]"}
+    "payload": {
+      "report": "# Research report\n\nSupported result. [1]"
+    }
   },
   {
     "type": "done",
@@ -122,6 +133,8 @@
     "thread_id": "thread-contract",
     "sequence": 7,
     "timestamp": "2026-08-26T00:00:06Z",
-    "payload": {"status": "completed"}
+    "payload": {
+      "status": "completed"
+    }
   }
 ]

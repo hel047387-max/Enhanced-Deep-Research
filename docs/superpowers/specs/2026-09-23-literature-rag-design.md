@@ -1,7 +1,7 @@
-﻿# Literature RAG System Design
+# Literature RAG System Design
 
 - Date: 2026-09-23
-- Status: Approved
+- Status: Implemented
 - Scope: Single-vector literature ingestion, retrieval, question answering, and Deep Research integration
 
 ## 1. Architecture decision

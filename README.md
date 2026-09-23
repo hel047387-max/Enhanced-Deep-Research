@@ -134,6 +134,36 @@ Each run has one in-process subscriber and a bounded event queue. Events carry a
 
 The API supports start, one clarification/resume on the same thread, snapshot restoration, report retrieval, and cancellation under `/api/v1/research`. SSE history replay is not supported; refresh recovery uses the latest committed snapshot rather than replaying past events.
 
+## Literature RAG
+
+The optional literature library parses PDF, DOCX, Markdown, HTML, and text files with Docling, keeps headings, pages, content type, neighbors, and supplied bibliographic metadata in each searchable unit, and stores one vector plus the complete unit payload in Qdrant. It does not add RAG tables to SQLite.
+
+Install the RAG dependencies and start a pinned Qdrant instance:
+
+```powershell
+cd backend
+python -m pip install -e ".[dev,rag]"
+docker run --name deep-research-qdrant -p 6333:6333 -p 6334:6334 -v qdrant_storage:/qdrant/storage qdrant/qdrant:v1.12.5
+```
+
+Set `RAG_ENABLED=true` in `backend/.env`. The first startup downloads the configured embedding and reranker models. Document and query embeddings use the same model. Upload processing is synchronous: a failed request writes no successful import record and must be submitted again.
+
+The frontend Literature library panel uses these endpoints:
+
+- `POST /api/v1/literature/documents`: multipart file plus optional `metadata_json`.
+- `POST /api/v1/literature/search`: semantic retrieval, reranking, and neighboring context.
+- `POST /api/v1/literature/answer`: grounded answer with validated unit citations.
+- `DELETE /api/v1/literature/documents/{document_id}`: delete all units for a document.
+
+Example search:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/api/v1/literature/search `
+  -Method Post -ContentType 'application/json' `
+  -Body '{"query":"hybrid retrieval","limit":5}'
+```
+
+Set `use_literature: true` on `POST /api/v1/research/stream`, or select the corresponding frontend option, to search indexed documents during the current research. The Writer can cite only literature units retrieved and revalidated in that run. MQE and HyDE text is used only as a retrieval key.
 ## Local setup
 
 Requirements: Python 3.11+, Node.js 20+, npm, an OpenAI-compatible model endpoint, and a Tavily API key for live application runs.
@@ -143,7 +173,7 @@ From PowerShell:
 ```powershell
 cd backend
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\.venv\Scripts\python.exe -m pip install -e ".[dev,rag]"
 Copy-Item ..\.env.example .env
 # Fill LLM_API_KEY and TAVILY_API_KEY in .env
 .\.venv\Scripts\python.exe -m uvicorn deep_research.api.main:app --reload
@@ -205,7 +235,7 @@ No screenshots are checked in because fabricated or stale images would be mislea
 - Live providers determine real-world latency and retrieval quality; fake evaluation measures reproducible contracts, not provider quality.
 - Supervisor/Reviewer adaptive task IDs and parent links still need collision and ancestry hardening before accepting less constrained model outputs.
 - Provider-wide retry/timeout wiring and a strict raw-content character cap remain future hardening; the existing helpers are not yet applied across every live boundary.
-- User accounts, authorization, multi-tenancy, vector memory, file/PDF upload, academic-specific retrieval, cloud deployment, and automatic publishing are not implemented.
+- User accounts, authorization, multi-tenancy, cloud deployment, and automatic publishing are not implemented.
 
 ## What I redesigned
 
