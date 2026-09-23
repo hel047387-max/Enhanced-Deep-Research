@@ -3,7 +3,10 @@ from datetime import UTC
 from typing import TypeVar
 
 from deep_research.domain.errors import ResearchError
-from deep_research.domain.evidence import Source
+from deep_research.domain.evidence import (
+    EvidenceSource,
+    LiteratureSource,
+)
 from deep_research.services.evidence_store import (
     canonicalize_url,
     source_id_from_canonical_url,
@@ -24,12 +27,21 @@ merge_gap_assessments = merge_mapping
 
 
 def _validated_source_entries(
-    sources: Mapping[str, Source] | None,
-) -> list[tuple[str, Source]]:
-    entries: list[tuple[str, Source]] = []
+    sources: Mapping[str, EvidenceSource] | None,
+) -> list[tuple[str, EvidenceSource]]:
+    entries: list[tuple[str, EvidenceSource]] = []
     for key, source in (sources or {}).items():
         if key != source.source_id:
             raise ValueError(f"source mapping key {key!r} does not match source_id {source.source_id!r}")
+        if isinstance(source, LiteratureSource):
+            expected_source_id = f"lit-{source.unit_id}"
+            if source.source_id != expected_source_id:
+                raise ValueError(
+                    f"source_id {source.source_id!r} does not match literature unit "
+                    f"{source.unit_id}"
+                )
+            entries.append((key, source))
+            continue
         canonical_url = canonicalize_url(str(source.canonical_url))
         expected_source_id = source_id_from_canonical_url(canonical_url)
         if source.source_id != expected_source_id:
@@ -40,7 +52,7 @@ def _validated_source_entries(
     return entries
 
 
-def _source_conflict_key(source: Source) -> tuple[tuple[int, str], str]:
+def _source_conflict_key(source: EvidenceSource) -> tuple[tuple[int, str], str]:
     retrieved_at = source.retrieved_at
     if retrieved_at.tzinfo is None or retrieved_at.utcoffset() is None:
         timestamp_key = (0, retrieved_at.isoformat(timespec="microseconds"))
@@ -50,11 +62,11 @@ def _source_conflict_key(source: Source) -> tuple[tuple[int, str], str]:
 
 
 def merge_sources(
-    left: Mapping[str, Source] | None,
-    right: Mapping[str, Source] | None,
-) -> dict[str, Source]:
+    left: Mapping[str, EvidenceSource] | None,
+    right: Mapping[str, EvidenceSource] | None,
+) -> dict[str, EvidenceSource]:
     """Merge canonical sources commutatively without mixing source snapshots."""
-    merged: dict[str, Source] = {}
+    merged: dict[str, EvidenceSource] = {}
     for source_id, source in [*_validated_source_entries(left), *_validated_source_entries(right)]:
         existing = merged.get(source_id)
         if existing is None or _source_conflict_key(source) > _source_conflict_key(existing):

@@ -4,9 +4,18 @@ from typing import NotRequired, TypedDict
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
+from deep_research.application.research_adapter import (
+    ResearchAdapter,
+    ResearchEvidenceBatch,
+)
 from deep_research.config import ResearchBudgets
 from deep_research.domain.errors import ResearchError
-from deep_research.domain.evidence import EvidenceItem, Relevance, Source, SourceType
+from deep_research.domain.evidence import (
+    EvidenceItem,
+    EvidenceSource,
+    Relevance,
+    SourceType,
+)
 from deep_research.domain.plan import (
     CoverageLevel,
     GapAssessment,
@@ -37,11 +46,12 @@ class ResearcherInput(TypedDict):
     research_brief: ResearchBrief
     total_queries: int
     query_budget: NotRequired[int]
+    use_literature: NotRequired[bool]
 
 
 class ResearcherState(ResearcherInput, total=False):
     queries: list[str]
-    sources: dict[str, Source]
+    sources: dict[str, EvidenceSource]
     evidence: dict[str, EvidenceItem]
     gap_assessment: GapAssessment
     current_round: int
@@ -55,7 +65,7 @@ class ResearcherState(ResearcherInput, total=False):
 
 class ResearcherOutput(TypedDict):
     updated_task: ResearchTask
-    sources: dict[str, Source]
+    sources: dict[str, EvidenceSource]
     evidence: dict[str, EvidenceItem]
     gap_assessment: GapAssessment
     errors: list[ResearchError]
@@ -155,6 +165,7 @@ def research_round_node(
     budgets: ResearchBudgets,
     event_sink: EventSink,
     cancellation_checker: CancellationChecker,
+    literature_adapter: ResearchAdapter | None = None,
 ):
     async def research_round(state: ResearcherState) -> dict[str, object]:
         """执行搜索、提取证据并更新任务轮次。"""
@@ -164,6 +175,8 @@ def research_round_node(
         round_number = state.get("current_round", 0) + 1
         attempts = 0
         hits = []
+        literature_batches: list[ResearchEvidenceBatch] = []
+        literature_errors: list[ResearchError] = []
         await event_sink.emit(
             "search_started",
             {
@@ -175,6 +188,31 @@ def research_round_node(
         for query in queries:
             cancellation_checker.raise_if_cancelled()
             attempts += 1
+            if state.get("use_literature", False) and literature_adapter is not None:
+                try:
+                    literature_batches.append(
+                        await literature_adapter.search(
+                            query,
+                            task=task,
+                            brief=brief,
+                            round_number=round_number,
+                            max_sources=budgets.max_sources_per_task,
+                            max_evidence=budgets.max_evidence_per_task,
+                        )
+                    )
+                except Exception:  # noqa: BLE001 - web research can still continue
+                    literature_errors.append(
+                        ResearchError(
+                            error_code="literature_search_failed",
+                            stage="research",
+                            message=(
+                                "Indexed literature search failed; web research "
+                                "continued."
+                            ),
+                            task_id=task.task_id,
+                            retryable=True,
+                        )
+                    )
             try:
                 hits.extend(
                     await search_provider.search(
@@ -205,7 +243,7 @@ def research_round_node(
                 "task_id": task.task_id,
                 "round": round_number,
                 "query_count": attempts,
-                "result_count": len(hits),
+                "result_count": len(hits) + sum(len(batch.sources) for batch in literature_batches),
                 "status": "completed",
             },
         )
@@ -213,6 +251,17 @@ def research_round_node(
         sources = dict(state.get("sources", {}))
         evidence = dict(state.get("evidence", {}))
         added_ids: list[str] = []
+        for batch in literature_batches:
+            for source_id, source in batch.sources.items():
+                if len(sources) >= budgets.max_sources_per_task:
+                    break
+                sources[source_id] = source
+            for evidence_id, item in batch.evidence.items():
+                if len(evidence) >= budgets.max_evidence_per_task:
+                    break
+                if item.source_id in sources:
+                    evidence[evidence_id] = item
+                    added_ids.append(evidence_id)
         for hit in hits:
             if len(sources) >= budgets.max_sources_per_task:
                 break
@@ -291,6 +340,7 @@ def research_round_node(
             "evidence": evidence,
             "current_round": round_number,
             "queries_used": state.get("queries_used", 0) + attempts,
+            "errors": [*state.get("errors", []), *literature_errors],
         }
 
     return research_round

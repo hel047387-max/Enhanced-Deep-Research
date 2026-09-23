@@ -2,7 +2,11 @@ from collections.abc import Mapping
 
 from pydantic import BaseModel
 
-from deep_research.domain.evidence import EvidenceItem, Source
+from deep_research.domain.evidence import (
+    EvidenceItem,
+    EvidenceSource,
+    LiteratureSource,
+)
 from deep_research.domain.plan import ResearchTask, TaskStatus
 from deep_research.domain.review import ReportDraft, ReportParagraph
 
@@ -37,7 +41,7 @@ def _paragraphs(draft: ReportDraft) -> list[tuple[str | None, ReportParagraph]]:
 def validate_draft(
     draft: ReportDraft,
     evidence: Mapping[str, EvidenceItem],
-    sources: Mapping[str, Source],
+    sources: Mapping[str, EvidenceSource],
     tasks: Mapping[str, ResearchTask],
 ) -> list[CitationIssue]:
     issues: list[CitationIssue] = []
@@ -85,10 +89,28 @@ def validate_draft(
     return issues
 
 
+def render_source_reference(source: EvidenceSource) -> str:
+    if not isinstance(source, LiteratureSource):
+        return f"{source.title} — {source.url}"
+    authors = ", ".join(source.authors)
+    publication = f" ({source.publication_year})" if source.publication_year else ""
+    section = " > ".join(source.heading_path)
+    location: list[str] = []
+    if section:
+        location.append(section)
+    if source.page_start is not None:
+        if source.page_end is not None and source.page_end != source.page_start:
+            location.append(f"pp. {source.page_start}-{source.page_end}")
+        else:
+            location.append(f"p. {source.page_start}")
+    suffix = f" — {'; '.join(location)}" if location else ""
+    author_prefix = f"{authors}. " if authors else ""
+    return f"{author_prefix}{source.title}{publication}{suffix}"
+
 def render_report(
     draft: ReportDraft,
     evidence: Mapping[str, EvidenceItem],
-    sources: Mapping[str, Source],
+    sources: Mapping[str, EvidenceSource],
     tasks: Mapping[str, ResearchTask],
 ) -> str:
     issues = validate_draft(draft, evidence, sources, tasks)
@@ -125,7 +147,7 @@ def render_report(
     if source_numbers:
         lines.extend(["", "## References", ""])
         lines.extend(
-            f"[{number}] {sources[source_id].title} — {sources[source_id].url}"
+            f"[{number}] {render_source_reference(sources[source_id])}"
             for source_id, number in source_numbers.items()
         )
     return "\n".join(lines)

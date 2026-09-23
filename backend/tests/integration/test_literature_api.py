@@ -177,3 +177,19 @@ async def test_answer_returns_grounded_citations(literature_client) -> None:
     assert response.status_code == 200
     assert response.json()["answer"] == "Grounded answer."
     assert response.json()["citations"][0]["page_start"] == 2
+
+@pytest.mark.asyncio
+async def test_research_request_reports_unavailable_literature(async_client) -> None:
+    async with async_client.stream(
+        "POST",
+        "/api/v1/research/stream",
+        json={"query": "A complete scoped question", "use_literature": True},
+    ) as response:
+        events = [
+            line
+            async for line in response.aiter_lines()
+            if line.startswith("data: ")
+        ]
+
+    assert response.status_code == 200
+    assert any("literature_unavailable" in event for event in events)

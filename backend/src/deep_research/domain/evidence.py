@@ -3,7 +3,9 @@ from __future__ import annotations
 import ipaddress
 from datetime import datetime
 from enum import StrEnum
+from typing import Literal, TypeAlias
 from urllib.parse import unquote, urlsplit, urlunsplit
+from uuid import UUID
 
 import idna
 from pydantic import AnyHttpUrl, BaseModel, Field, field_validator
@@ -159,6 +161,7 @@ class Relevance(StrEnum):
 class Source(BaseModel, frozen=True):
     """外部来源模型，负责保存并校验公开 HTTP 来源。"""
     source_id: str
+    source_kind: Literal["web"] = "web"
     url: AnyHttpUrl
     canonical_url: AnyHttpUrl
     title: str
@@ -173,6 +176,22 @@ class Source(BaseModel, frozen=True):
     def validate_url(cls, value: AnyHttpUrl | str) -> AnyHttpUrl | str:
         return validate_public_http_url(str(value))
 
+class LiteratureSource(BaseModel, frozen=True):
+    source_id: str
+    source_kind: Literal["literature"] = "literature"
+    document_id: UUID
+    unit_id: UUID
+    title: str
+    authors: list[str] = Field(default_factory=list)
+    publication_year: int | None = None
+    doi: str | None = None
+    heading_path: list[str] = Field(default_factory=list)
+    page_start: int | None = None
+    page_end: int | None = None
+    retrieved_at: datetime
+
+
+EvidenceSource: TypeAlias = Source | LiteratureSource
 
 class EvidenceItem(BaseModel, frozen=True):
     """证据条目模型，关联来源与研究结论。"""

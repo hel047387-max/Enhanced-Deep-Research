@@ -41,6 +41,7 @@ class LiteratureApplication:
     processor: DocumentProcessor
     retriever: LiteratureRetriever
     answer_service: Any | None = None
+    research_adapter: Any | None = None
 
 
 def _application(request: Request) -> LiteratureApplication:
