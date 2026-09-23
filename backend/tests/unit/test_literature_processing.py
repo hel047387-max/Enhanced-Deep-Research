@@ -1,9 +1,18 @@
 import os
 from types import SimpleNamespace
+from uuid import UUID
 
 import pytest
 
-from deep_research.domain.literature import LiteratureMetadata
+from deep_research.application.document_processor import (
+    DocumentProcessor,
+    EmbeddingCountMismatch,
+)
+from deep_research.domain.literature import (
+    LiteratureFilter,
+    LiteratureMetadata,
+    SearchableUnit,
+)
 from deep_research.infrastructure.docling_parser import DoclingParser, EmptyDocument
 from deep_research.infrastructure.embedding_provider import (
     SentenceTransformerEmbeddingProvider,
@@ -70,18 +79,14 @@ async def test_docling_parser_preserves_structure_and_neighbors() -> None:
             "First paragraph",
             {
                 "headings": ["Methods", "Retrieval"],
-                "doc_items": [
-                    {"label": "text", "prov": [{"page_no": 2}]},
-                ],
+                "doc_items": [{"label": "text", "prov": [{"page_no": 2}]}],
             },
         ),
         FakeChunk(
             "| method | score |\n| RAG | 0.9 |",
             {
                 "headings": ["Methods", "Results"],
-                "doc_items": [
-                    {"label": "table", "prov": [{"page_no": 3}]},
-                ],
+                "doc_items": [{"label": "table", "prov": [{"page_no": 3}]}],
             },
         ),
     ]
@@ -140,3 +145,160 @@ async def test_same_embedding_provider_encodes_documents_and_queries() -> None:
     assert query == [0.0, 1.0, 0.0]
     assert model.document_inputs == ["document"]
     assert model.query_inputs == ["query"]
+
+
+class StubParser:
+    def __init__(self, units: list[SearchableUnit]) -> None:
+        self.units = units
+
+    async def parse(
+        self,
+        *,
+        filename: str,
+        content: bytes,
+        metadata: LiteratureMetadata,
+    ) -> list[SearchableUnit]:
+        return self.units
+
+
+class StubEmbedder:
+    dimension = 3
+
+    def __init__(self) -> None:
+        self.document_texts: list[str] = []
+        self.vectors: list[list[float]] | None = None
+
+    async def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        self.document_texts = texts
+        if self.vectors is not None:
+            return self.vectors
+        return [[1.0, 0.0, 0.0] for _ in texts]
+
+    async def embed_query(self, text: str) -> list[float]:
+        raise AssertionError("query embedding is not used during ingestion")
+
+
+class StubIndex:
+    def __init__(self) -> None:
+        self.ensured_dimension: int | None = None
+        self.upserted_units: list[SearchableUnit] = []
+        self.upsert_calls = 0
+        self.upsert_error: Exception | None = None
+        self.deleted_document: UUID | None = None
+
+    async def ensure_collection(self, vector_size: int) -> None:
+        self.ensured_dimension = vector_size
+
+    async def upsert(
+        self,
+        units: list[SearchableUnit],
+        vectors: list[list[float]],
+    ) -> None:
+        self.upsert_calls += 1
+        if self.upsert_error is not None:
+            raise self.upsert_error
+        self.upserted_units = units
+
+    async def search(
+        self,
+        vector: list[float],
+        *,
+        limit: int,
+        filters: LiteratureFilter,
+    ):
+        raise AssertionError("search is not used during ingestion")
+
+    async def retrieve(self, unit_ids: list[UUID]):
+        raise AssertionError("retrieve is not used during ingestion")
+
+    async def delete_document(self, document_id: UUID) -> None:
+        self.deleted_document = document_id
+
+
+def ingestion_unit(unit_id: str, text: str) -> SearchableUnit:
+    return SearchableUnit(
+        unit_id=unit_id,
+        document_id="22222222-2222-4222-8222-222222222222",
+        title="RAG paper",
+        content_type="paragraph",
+        text=text,
+    )
+
+
+@pytest.mark.asyncio
+async def test_ingest_embeds_and_upserts_units() -> None:
+    units = [
+        ingestion_unit("11111111-1111-4111-8111-111111111111", "one"),
+        ingestion_unit("33333333-3333-4333-8333-333333333333", "two"),
+    ]
+    parser = StubParser(units)
+    embedder = StubEmbedder()
+    index = StubIndex()
+    processor = DocumentProcessor(parser, embedder, index)
+    metadata = LiteratureMetadata(title="RAG paper")
+
+    result = await processor.ingest("paper.pdf", b"%PDF", metadata)
+
+    assert result.units_indexed == 2
+    assert embedder.document_texts == [unit.embedding_text() for unit in units]
+    assert index.ensured_dimension == 3
+    assert index.upserted_units == units
+
+
+@pytest.mark.asyncio
+async def test_empty_document_never_writes_qdrant() -> None:
+    index = StubIndex()
+    processor = DocumentProcessor(StubParser([]), StubEmbedder(), index)
+
+    with pytest.raises(EmptyDocument):
+        await processor.ingest(
+            "empty.pdf",
+            b"%PDF",
+            LiteratureMetadata(title="Empty"),
+        )
+
+    assert index.upsert_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_embedding_count_must_match_unit_count() -> None:
+    unit = ingestion_unit("11111111-1111-4111-8111-111111111111", "one")
+    embedder = StubEmbedder()
+    embedder.vectors = []
+    index = StubIndex()
+    processor = DocumentProcessor(StubParser([unit]), embedder, index)
+
+    with pytest.raises(EmbeddingCountMismatch):
+        await processor.ingest(
+            "paper.pdf",
+            b"%PDF",
+            LiteratureMetadata(title="RAG paper"),
+        )
+
+    assert index.upsert_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_qdrant_failure_remains_an_error() -> None:
+    unit = ingestion_unit("11111111-1111-4111-8111-111111111111", "one")
+    index = StubIndex()
+    index.upsert_error = RuntimeError("qdrant unavailable")
+    processor = DocumentProcessor(StubParser([unit]), StubEmbedder(), index)
+
+    with pytest.raises(RuntimeError, match="qdrant unavailable"):
+        await processor.ingest(
+            "paper.pdf",
+            b"%PDF",
+            LiteratureMetadata(title="RAG paper"),
+        )
+
+
+@pytest.mark.asyncio
+async def test_delete_delegates_to_vector_index() -> None:
+    index = StubIndex()
+    processor = DocumentProcessor(StubParser([]), StubEmbedder(), index)
+    document_id = UUID("22222222-2222-4222-8222-222222222222")
+
+    await processor.delete(document_id)
+
+    assert index.deleted_document == document_id
