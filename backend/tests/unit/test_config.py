@@ -67,3 +67,17 @@ def test_settings_allow_missing_provider_credentials(
     settings = Settings(_env_file=None)
     assert settings.llm_api_key is None
     assert settings.tavily_api_key is None
+
+
+def test_rag_settings_reject_invalid_limits() -> None:
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, rag_top_k=0)
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, rag_candidate_limit=0)
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, rag_chunk_max_tokens=0)
+
+
+def test_rag_settings_keep_top_k_within_candidate_limit() -> None:
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, rag_candidate_limit=4, rag_top_k=5)

@@ -2,7 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 InitialTasks = Annotated[int, Field(ge=3, le=5)]
@@ -14,6 +14,11 @@ ConcurrentResearchers = Annotated[int, Field(ge=1, le=3)]
 TotalSearchQueries = Annotated[int, Field(ge=1, le=20)]
 SourcesPerTask = Annotated[int, Field(ge=1, le=8)]
 EvidencePerTask = Annotated[int, Field(ge=1, le=20)]
+RagChunkTokens = Annotated[int, Field(ge=64, le=4096)]
+RagCandidateLimit = Annotated[int, Field(ge=1, le=200)]
+RagTopK = Annotated[int, Field(ge=1, le=50)]
+RagContextChars = Annotated[int, Field(ge=1000, le=200_000)]
+RagUploadBytes = Annotated[int, Field(ge=1, le=1_073_741_824)]
 
 
 class ResearchBudgets(BaseModel, frozen=True):
@@ -26,8 +31,6 @@ class ResearchBudgets(BaseModel, frozen=True):
     max_total_search_queries: TotalSearchQueries = 20
     max_sources_per_task: SourcesPerTask = 8
     max_evidence_per_task: EvidencePerTask = 20
-
-
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
     llm_provider: str = "openai"
@@ -47,6 +50,23 @@ class Settings(BaseSettings):
     max_total_search_queries: TotalSearchQueries = 20
     max_sources_per_task: SourcesPerTask = 8
     max_evidence_per_task: EvidencePerTask = 20
+    rag_enabled: bool = False
+    qdrant_url: str = "http://localhost:6333"
+    qdrant_api_key: str | None = None
+    qdrant_collection: str = "literature_units"
+    rag_embedding_model: str = "BAAI/bge-m3"
+    rag_reranker_model: str = "BAAI/bge-reranker-v2-m3"
+    rag_chunk_max_tokens: RagChunkTokens = 800
+    rag_candidate_limit: RagCandidateLimit = 30
+    rag_top_k: RagTopK = 8
+    rag_context_max_chars: RagContextChars = 20_000
+    rag_max_upload_bytes: RagUploadBytes = 52_428_800
+
+    @model_validator(mode="after")
+    def validate_rag_limits(self) -> "Settings":
+        if self.rag_top_k > self.rag_candidate_limit:
+            raise ValueError("rag_top_k cannot exceed rag_candidate_limit")
+        return self
 
     @property
     def budgets(self) -> ResearchBudgets:
