@@ -113,6 +113,7 @@ def test_application_exposes_only_the_approved_endpoints() -> None:
         ("POST", "/api/v1/research/{thread_id}/cancel"),
         ("POST", "/api/v1/literature/documents"),
         ("POST", "/api/v1/literature/search"),
+        ("POST", "/api/v1/literature/answer"),
         ("DELETE", "/api/v1/literature/documents/{document_id}"),
         ("GET", "/health"),
     }

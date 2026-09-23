@@ -24,3 +24,11 @@ def hyde_prompt() -> str:
         "could contain. Use it only as a semantic retrieval key. It is not evidence "
         "and must never be cited or presented as a factual source."
     )
+
+def literature_answer_prompt() -> str:
+    return (
+        "Answer the question only from the supplied literature context. "
+        "Return a concise answer and the unit_id values that directly support it. "
+        "Every factual claim must be supported by those units. If the context does "
+        "not support an answer, do not invent facts or identifiers."
+    )

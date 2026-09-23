@@ -10,6 +10,8 @@ from deep_research.api.main import create_app
 from deep_research.config import Settings
 from deep_research.domain.literature import (
     IngestedDocument,
+    LiteratureAnswer,
+    LiteratureCitation,
     LiteratureMetadata,
     RetrievedUnit,
     SearchableUnit,
@@ -61,12 +63,28 @@ class FakeRetriever:
         self.requests.append(request)
         return [RetrievedUnit(unit=self.unit, similarity_score=0.8, rerank_score=0.9)]
 
+class FakeAnswerService:
+    async def answer(self, request):
+        return LiteratureAnswer(
+            answer="Grounded answer.",
+            citations=[
+                LiteratureCitation(
+                    unit_id=UUID("11111111-1111-4111-8111-111111111111"),
+                    document_id=UUID("22222222-2222-4222-8222-222222222222"),
+                    title="RAG paper",
+                    authors=["Author"],
+                    publication_year=2025,
+                    page_start=2,
+                    page_end=2,
+                )
+            ],
+        )
 
 @pytest.fixture
 async def literature_client(runtime_harness):
     processor = FakeProcessor()
     retriever = FakeRetriever()
-    literature = LiteratureApplication(processor=processor, retriever=retriever)
+    literature = LiteratureApplication(processor=processor, retriever=retriever, answer_service=FakeAnswerService())
     app = create_app(
         runtime_harness.runtime,
         literature_application=literature,
@@ -146,3 +164,16 @@ async def test_disabled_literature_returns_503(async_client) -> None:
     )
 
     assert response.status_code == 503
+
+@pytest.mark.asyncio
+async def test_answer_returns_grounded_citations(literature_client) -> None:
+    client, _, _ = literature_client
+
+    response = await client.post(
+        "/api/v1/literature/answer",
+        json={"query": "What does the paper support?"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["answer"] == "Grounded answer."
+    assert response.json()["citations"][0]["page_start"] == 2

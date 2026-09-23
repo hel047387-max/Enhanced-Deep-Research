@@ -23,9 +23,13 @@ from deep_research.api.schemas import (
     LiteratureSearchItem,
     LiteratureSearchResponse,
 )
+from deep_research.application.answer_service import (
+    InsufficientLiteratureEvidence,
+    InvalidLiteratureCitation,
+)
 from deep_research.application.document_processor import DocumentProcessor
 from deep_research.application.retriever import LiteratureRetriever
-from deep_research.domain.literature import LiteratureMetadata
+from deep_research.domain.literature import LiteratureAnswer, LiteratureMetadata
 from deep_research.infrastructure.docling_parser import (
     EmptyDocument,
     UnsupportedDocument,
@@ -99,6 +103,32 @@ async def search_literature(
         items=[LiteratureSearchItem.from_result(item) for item in results]
     )
 
+
+
+@router.post("/answer", response_model=LiteratureAnswer)
+async def answer_literature(
+    body: LiteratureSearchBody,
+    request: Request,
+) -> LiteratureAnswer:
+    service = _application(request).answer_service
+    if service is None:
+        raise HTTPException(status_code=503, detail="Literature answering is unavailable.")
+    try:
+        return await service.answer(body.to_domain())
+    except InsufficientLiteratureEvidence as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The indexed literature does not contain enough evidence.",
+        ) from exc
+    except InvalidLiteratureCitation as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="The answer contained an invalid literature citation.",
+        ) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Literature answering failed.") from exc
 
 @router.delete(
     "/documents/{document_id}",

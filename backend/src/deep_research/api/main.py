@@ -86,6 +86,11 @@ def _production_literature_application(
             "Literature RAG requires the optional 'rag' dependencies."
         ) from None
 
+    from deep_research.application.answer_service import (
+        AnswerService,
+        LiteratureAnswerDraft,
+    )
+    from deep_research.application.context_builder import ContextBuilder
     from deep_research.application.document_processor import DocumentProcessor
     from deep_research.application.query_enhancer import (
         ExpandedQueries,
@@ -137,6 +142,11 @@ def _production_literature_application(
         LiteratureApplication(
             processor=DocumentProcessor(parser, embedder, index),
             retriever=retriever,
+            answer_service=AnswerService(
+                retriever,
+                ContextBuilder(index, max_chars=settings.rag_context_max_chars),
+                create_structured_model(settings, LiteratureAnswerDraft),
+            ),
         ),
         client,
     )
