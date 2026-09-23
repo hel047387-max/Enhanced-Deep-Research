@@ -4,8 +4,12 @@ from uuid import UUID
 import pytest
 from pydantic import ValidationError
 
+from deep_research.application.context_builder import ContextBuilder
+from deep_research.application.retriever import LiteratureRetriever
 from deep_research.domain.literature import (
     LiteratureFilter,
+    LiteratureSearchRequest,
+    QueryDecision,
     RetrievedUnit,
     SearchableUnit,
 )
@@ -215,3 +219,163 @@ async def test_cross_encoder_reranks_candidates() -> None:
         UUID("11111111-1111-4111-8111-111111111111"),
     ]
     assert ranked[0].rerank_score == 0.9
+
+
+class StaticRouter:
+    def __init__(self, strategy: str) -> None:
+        self.strategy = strategy
+
+    async def route(self, query: str) -> QueryDecision:
+        return QueryDecision(mode=self.strategy, reason="test")
+
+
+class StaticEnhancer:
+    def __init__(self, queries: list[str]) -> None:
+        self.queries = queries
+
+    async def expand(self, query: str, strategy: str) -> list[str]:
+        return self.queries
+
+
+class RecordingQueryEmbedder:
+    def __init__(self) -> None:
+        self.queries: list[str] = []
+
+    async def embed_query(self, text: str) -> list[float]:
+        self.queries.append(text)
+        return [float(len(self.queries))]
+
+
+class SearchIndex:
+    def __init__(
+        self,
+        results: list[list[RetrievedUnit]],
+        neighbors: list[SearchableUnit] | None = None,
+    ) -> None:
+        self.results = iter(results)
+        self.neighbors = neighbors or []
+        self.retrieve_calls: list[list[UUID]] = []
+
+    async def search(
+        self,
+        vector: list[float],
+        *,
+        limit: int,
+        filters: LiteratureFilter,
+    ) -> list[RetrievedUnit]:
+        return next(self.results)
+
+    async def retrieve(self, unit_ids: list[UUID]) -> list[SearchableUnit]:
+        self.retrieve_calls.append(unit_ids)
+        return self.neighbors
+
+
+class RecordingReranker:
+    def __init__(self) -> None:
+        self.candidates: list[RetrievedUnit] = []
+
+    async def rerank(
+        self,
+        query: str,
+        candidates: list[RetrievedUnit],
+        *,
+        limit: int,
+    ) -> list[RetrievedUnit]:
+        self.candidates = candidates
+        return candidates[:limit]
+
+
+@pytest.mark.asyncio
+async def test_direct_route_embeds_original_query_once() -> None:
+    unit = RetrievedUnit(unit=make_unit(), similarity_score=0.8)
+    embedder = RecordingQueryEmbedder()
+    retriever = LiteratureRetriever(
+        StaticRouter("direct"),
+        StaticEnhancer(["ignored"]),
+        embedder,
+        SearchIndex([[unit]]),
+        RecordingReranker(),
+        candidate_limit=10,
+        top_k=5,
+    )
+
+    result = await retriever.search(LiteratureSearchRequest(query="original"))
+
+    assert embedder.queries == ["original"]
+    assert result == [unit]
+
+
+@pytest.mark.asyncio
+async def test_mqe_uses_three_queries_and_deduplicates_units() -> None:
+    first = make_unit()
+    second = make_unit(
+        "33333333-3333-4333-8333-333333333333",
+        text="Second unit",
+    )
+    embedder = RecordingQueryEmbedder()
+    reranker = RecordingReranker()
+    retriever = LiteratureRetriever(
+        StaticRouter("mqe"),
+        StaticEnhancer(["q1", "q2", "q3", "q4"]),
+        embedder,
+        SearchIndex(
+            [
+                [RetrievedUnit(unit=first, similarity_score=0.5)],
+                [
+                    RetrievedUnit(unit=first, similarity_score=0.9),
+                    RetrievedUnit(unit=second, similarity_score=0.7),
+                ],
+                [RetrievedUnit(unit=second, similarity_score=0.6)],
+            ]
+        ),
+        reranker,
+        candidate_limit=10,
+        top_k=5,
+    )
+
+    await retriever.search(LiteratureSearchRequest(query="original"))
+
+    assert embedder.queries == ["q1", "q2", "q3"]
+    assert [item.unit.unit_id for item in reranker.candidates] == [
+        first.unit_id,
+        second.unit_id,
+    ]
+    assert reranker.candidates[0].similarity_score == 0.9
+
+
+@pytest.mark.asyncio
+async def test_context_adds_existing_neighbors_once() -> None:
+    previous = make_unit(
+        "44444444-4444-4444-8444-444444444444",
+        text="Previous",
+    )
+    primary = make_unit(text="Primary").model_copy(
+        update={"previous_unit_id": previous.unit_id, "next_unit_id": previous.unit_id}
+    )
+    index = SearchIndex([], neighbors=[previous])
+    builder = ContextBuilder(index, max_chars=10_000)
+
+    context = await builder.build(
+        [RetrievedUnit(unit=primary, similarity_score=0.9)]
+    )
+
+    assert index.retrieve_calls == [[previous.unit_id]]
+    assert [unit.unit_id for unit in context.units] == [
+        primary.unit_id,
+        previous.unit_id,
+    ]
+    assert "Primary" in context.text
+    assert "Previous" in context.text
+
+
+@pytest.mark.asyncio
+async def test_context_respects_character_budget() -> None:
+    unit = make_unit(text="x" * 500)
+    builder = ContextBuilder(SearchIndex([]), max_chars=120)
+
+    context = await builder.build(
+        [RetrievedUnit(unit=unit, similarity_score=0.9)]
+    )
+
+    assert len(context.text) <= 120
+    assert context.units == [unit]
