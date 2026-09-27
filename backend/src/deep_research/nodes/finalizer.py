@@ -4,6 +4,7 @@ from deep_research.services.citations import render_report, validate_draft
 from deep_research.state.models import ResearchState
 
 
+#把报告中所有无效的 evidence_id 删除掉，同时在 limitations 中记录一条说明。
 def _remove_invalid_associations(
     draft: ReportDraft,
     invalid_ids: set[str],

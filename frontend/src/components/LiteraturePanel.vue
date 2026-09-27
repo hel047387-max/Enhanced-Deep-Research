@@ -1,7 +1,13 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { literatureApi, type LiteratureApiClient } from "../api/literature";
-import type { LiteratureAnswer, LiteratureSearchItem } from "../types/literature";
+import ProgressBar from "./ProgressBar.vue";
+import type {
+  LiteratureAnswer,
+  LiteratureDocument,
+  LiteratureQueryOptions,
+  LiteratureSearchItem,
+} from "../types/literature";
 
 const props = defineProps<{ api?: LiteratureApiClient }>();
 const client = props.api ?? literatureApi;
@@ -10,11 +16,22 @@ const title = ref("");
 const authors = ref("");
 const tags = ref("");
 const question = ref("");
+const documents = ref<LiteratureDocument[]>([]);
+const selectedDocumentIds = ref<string[]>([]);
+const resultLimit = ref(3);
 const results = ref<LiteratureSearchItem[]>([]);
 const answer = ref<LiteratureAnswer | null>(null);
 const uploadMessage = ref("");
+const loadingDocuments = ref(false);
 const busy = ref<"upload" | "search" | "answer" | "delete" | null>(null);
 const error = ref("");
+const operationLabel = computed(() => {
+  if (busy.value === "upload") return "Parsing and indexing document";
+  if (busy.value === "search") return "Searching literature";
+  if (busy.value === "answer") return "Generating cited answer";
+  if (busy.value === "delete") return "Deleting document";
+  return "Loading literature library";
+});
 
 function selectFile(event: Event) {
   file.value = (event.target as HTMLInputElement).files?.[0] ?? null;
@@ -23,6 +40,26 @@ function selectFile(event: Event) {
 
 function values(input: string): string[] {
   return input.split(",").map((value) => value.trim()).filter(Boolean);
+}
+
+function queryOptions(): LiteratureQueryOptions {
+  return {
+    document_ids: selectedDocumentIds.value,
+    limit: resultLimit.value,
+  };
+}
+
+async function loadDocuments() {
+  loadingDocuments.value = true;
+  try {
+    documents.value = await client.listDocuments();
+    const available = new Set(documents.value.map((document) => document.document_id));
+    selectedDocumentIds.value = selectedDocumentIds.value.filter((id) => available.has(id));
+  } catch (reason) {
+    error.value = reason instanceof Error ? reason.message : "Document list failed.";
+  } finally {
+    loadingDocuments.value = false;
+  }
 }
 
 async function upload() {
@@ -36,6 +73,7 @@ async function upload() {
       tags: values(tags.value),
     });
     uploadMessage.value = `${result.units_indexed} searchable units indexed.`;
+    await loadDocuments();
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : "Document upload failed.";
   } finally {
@@ -50,7 +88,7 @@ async function search() {
   error.value = "";
   answer.value = null;
   try {
-    results.value = (await client.searchLiterature(query)).items;
+    results.value = (await client.searchLiterature(query, queryOptions())).items;
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : "Literature search failed.";
   } finally {
@@ -65,7 +103,7 @@ async function ask() {
   error.value = "";
   results.value = [];
   try {
-    answer.value = await client.answerLiterature(query);
+    answer.value = await client.answerLiterature(query, queryOptions());
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : "Literature answering failed.";
   } finally {
@@ -80,6 +118,7 @@ async function remove(documentId: string) {
   try {
     await client.deleteDocument(documentId);
     results.value = results.value.filter((item) => item.document_id !== documentId);
+    await loadDocuments();
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : "Document deletion failed.";
   } finally {
@@ -91,14 +130,23 @@ function pages(start: number | null, end: number | null): string {
   if (start === null) return "Pages unavailable";
   return end !== null && end !== start ? `Pages ${start}–${end}` : `Page ${start}`;
 }
+
+onMounted(loadDocuments);
 </script>
 
 <template>
   <section class="panel literature-panel" aria-labelledby="literature-heading">
     <div class="section-heading">
       <div><p class="eyebrow">Local knowledge</p><h2 id="literature-heading">Literature library</h2></div>
-      <span class="count-chip">Qdrant</span>
+      <span class="count-chip">{{ documents.length }} documents</span>
     </div>
+
+    <ProgressBar
+      v-if="busy !== null || loadingDocuments"
+      class="rag-progress"
+      :label="operationLabel"
+      detail="This step completes automatically."
+    />
 
     <div class="literature-grid">
       <div class="stack">
@@ -115,6 +163,42 @@ function pages(start: number | null, end: number | null): string {
 
       <div class="stack">
         <h3>Search or ask</h3>
+        <fieldset class="document-picker">
+          <legend>Search scope</legend>
+          <p v-if="loadingDocuments" class="meta">Loading literature…</p>
+          <p v-else-if="!documents.length" class="meta">No indexed literature.</p>
+          <div v-for="document in documents" :key="document.document_id" class="document-row">
+            <label>
+              <input
+                v-model="selectedDocumentIds"
+                type="checkbox"
+                :value="document.document_id"
+                :data-document-id="document.document_id"
+              />
+              <span>
+                <strong>{{ document.title }}</strong>
+                <small>{{ document.authors.join(', ') || 'Unknown author' }} · {{ document.units_indexed }} units</small>
+              </span>
+            </label>
+            <button
+              type="button"
+              class="secondary compact"
+              :disabled="busy !== null"
+              :aria-label="`Delete ${document.title}`"
+              @click="remove(document.document_id)"
+            >Delete</button>
+          </div>
+          <small v-if="documents.length" class="scope-help">No selection searches all literature.</small>
+        </fieldset>
+
+        <label class="result-limit">
+          Results
+          <select v-model.number="resultLimit" data-field="result-limit">
+            <option :value="1">1</option>
+            <option :value="2">2</option>
+            <option :value="3">3</option>
+          </select>
+        </label>
         <textarea v-model="question" data-field="question" rows="3" placeholder="Search the indexed literature" />
         <div class="actions">
           <button data-action="search" class="secondary" :disabled="!question.trim() || busy !== null" @click="search">Search</button>
@@ -128,7 +212,6 @@ function pages(start: number | null, end: number | null): string {
       <article v-for="item in results" :key="item.unit_id" class="literature-result">
         <div><strong>{{ item.title }}</strong><small>{{ item.heading_path.join(' › ') || 'No section' }} · {{ pages(item.page_start, item.page_end) }}</small></div>
         <p>{{ item.text }}</p>
-        <button class="secondary compact" :disabled="busy !== null" @click="remove(item.document_id)">Delete document</button>
       </article>
     </div>
 

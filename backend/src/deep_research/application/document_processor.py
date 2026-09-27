@@ -6,6 +6,7 @@ from deep_research.domain.literature import (
     DocumentParser,
     EmbeddingProvider,
     IngestedDocument,
+    LiteratureDocument,
     LiteratureIndex,
     LiteratureMetadata,
 )
@@ -58,6 +59,9 @@ class DocumentProcessor:
             units_indexed=len(units),
             metadata=metadata,
         )
+
+    async def list_documents(self) -> list[LiteratureDocument]:
+        return await self._index.list_documents()
 
     async def delete(self, document_id: UUID) -> None:
         await self._index.delete_document(document_id)

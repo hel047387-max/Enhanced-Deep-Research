@@ -5,6 +5,7 @@ from deep_research.domain.evidence import (
     validate_public_http_url as normalize_public_http_url,
 )
 
+#防止访问危险url
 
 class UnsafeUrlError(ValueError):
     """Raised when a URL or its resolved address is unsafe to request."""
@@ -12,7 +13,7 @@ class UnsafeUrlError(ValueError):
 
 def validate_public_http_url(
     url: str,
-    *,
+    *,#只能用关键字参数导入
     resolved_ips: Iterable[str] = (),
 ) -> str:
     """Apply canonical URL validation and reject unsafe DNS results."""

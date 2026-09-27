@@ -4,18 +4,20 @@ import type { RunStatus } from "../types/research";
 
 const props = defineProps<{ status: RunStatus; clarification: string | null }>();
 const emit = defineEmits<{
-  start: [query: string];
+  start: [query: string, useMemory: boolean, useLiterature: boolean];
   resume: [answer: string];
   cancel: [];
 }>();
 
 const query = ref("");
+const useMemory = ref(true);
+const useLiterature = ref(false);
 const answer = ref("");
 const running = computed(() => props.status === "running");
 
 function submitStart() {
   const value = query.value.trim();
-  if (value && !running.value) emit("start", value);
+  if (value && !running.value) emit("start", value, useMemory.value, useLiterature.value);
 }
 
 function submitAnswer() {
@@ -40,6 +42,8 @@ function submitAnswer() {
         placeholder="Compare two approaches, investigate a market, or explain a recent change…"
         :disabled="running"
       />
+      <label class="memory-choice"><input v-model="useMemory" data-testid="use-memory" type="checkbox" /> Use previous research to plan this study</label>
+      <label class="memory-choice"><input v-model="useLiterature" data-testid="use-literature" type="checkbox" /> Search indexed literature during this study</label>
       <div class="actions">
         <button data-testid="start-submit" class="primary" type="submit" :disabled="!query.trim() || running">
           {{ running ? "Research in progress" : "Start research" }}

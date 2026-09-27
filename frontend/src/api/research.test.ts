@@ -106,7 +106,7 @@ describe("research API", () => {
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       "/api/v1/research/stream",
-      expect.objectContaining({ method: "POST", body: JSON.stringify({ query: "bounded agents" }), signal }),
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ query: "bounded agents", use_memory: true, use_literature: false }), signal }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,

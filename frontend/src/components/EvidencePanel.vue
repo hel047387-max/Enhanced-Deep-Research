@@ -20,8 +20,9 @@ const groups = computed(() => {
   }));
 });
 
-function safeExternalUrl(value: string): string | null {
+function safeExternalUrl(value: string | null): string | null {
   try {
+    if (value === null) return null;
     const url = new URL(value);
     return url.protocol === "http:" || url.protocol === "https:" ? url.href : null;
   } catch {
@@ -50,7 +51,7 @@ function safeExternalUrl(value: string): string | null {
             target="_blank"
             rel="noopener noreferrer"
           >{{ sources[item.sourceId].title }}</a>
-          <span v-else>{{ sources[item.sourceId].title }}</span>
+          <span v-else>{{ sources[item.sourceId].title }}<small v-if="sources[item.sourceId].sourceKind === 'literature'"> · {{ sources[item.sourceId].headingPath?.join(' › ') }} · Page {{ sources[item.sourceId].pageStart ?? '?' }}</small></span>
         </template>
       </article>
     </div>

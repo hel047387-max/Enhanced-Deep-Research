@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any
@@ -29,11 +30,17 @@ from deep_research.application.answer_service import (
 )
 from deep_research.application.document_processor import DocumentProcessor
 from deep_research.application.retriever import LiteratureRetriever
-from deep_research.domain.literature import LiteratureAnswer, LiteratureMetadata
+from deep_research.domain.literature import (
+    LiteratureAnswer,
+    LiteratureDocument,
+    LiteratureMetadata,
+)
 from deep_research.infrastructure.docling_parser import (
     EmptyDocument,
     UnsupportedDocument,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -52,6 +59,17 @@ def _application(request: Request) -> LiteratureApplication:
 
 
 router = APIRouter(prefix="/api/v1/literature")
+
+
+@router.get("/documents", response_model=list[LiteratureDocument])
+async def list_documents(request: Request) -> list[LiteratureDocument]:
+    try:
+        return await _application(request).processor.list_documents()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Document listing failed")
+        raise HTTPException(status_code=502, detail="Document listing failed.") from exc
 
 
 @router.post(
@@ -86,6 +104,7 @@ async def upload_document(
     except HTTPException:
         raise
     except Exception as exc:
+        logger.exception("Document indexing failed for %s", filename)
         raise HTTPException(status_code=502, detail="Document indexing failed.") from exc
 
 

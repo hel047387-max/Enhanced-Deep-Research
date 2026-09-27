@@ -16,9 +16,10 @@ from deep_research.llm import StructuredModel
 from deep_research.prompts.planning import planning_prompt
 
 
+#校验大模型的输出并进行归一化处理
 def _normalize_plan(raw: Any, *, max_queries: int) -> Any:
     if isinstance(raw, BaseModel):
-        payload = raw.model_dump()
+        payload = raw.model_dump() # 如果 raw 是 Pydantic 模型，就把它转换成普通字典
     elif isinstance(raw, dict):
         payload = deepcopy(raw)
     else:
@@ -26,7 +27,7 @@ def _normalize_plan(raw: Any, *, max_queries: int) -> Any:
 
     tasks = payload.get("tasks")
     if not isinstance(tasks, list):
-        return payload
+        return payload#不继续处理任务，直接返回当前
 
     normalized_tasks: list[Any] = []
     used_ids: set[str] = set()
@@ -58,7 +59,7 @@ def _normalize_plan(raw: Any, *, max_queries: int) -> Any:
     payload["tasks"] = normalized_tasks
     return payload
 
-
+# 作用：根据 research_brief 生成正式的 ResearchPlan
 async def plan_research(
     state: dict[str, Any],
     model: StructuredModel,
@@ -69,7 +70,15 @@ async def plan_research(
     resolved_budgets = budgets or ResearchBudgets()
     messages = [
         SystemMessage(content=planning_prompt(brief.source_preferences)),
-        HumanMessage(content=brief.model_dump_json()),
+        HumanMessage(content=(
+            json.dumps(
+                {"brief": brief.model_dump(mode="json"),
+                 "historical_research": state["memory_context"]},
+                ensure_ascii=False,
+            )
+            if state.get("memory_context", {}).get("researches")
+            else brief.model_dump_json()
+        )),
     ]
     plan: ResearchPlan | None = None
     for attempt in range(2):
@@ -85,7 +94,7 @@ async def plan_research(
             if attempt == 1:
                 raise
             messages = [
-                *messages,
+                *messages,# 保留之前所有消息
                 HumanMessage(
                     content=(
                         "Correct the previous ResearchPlan and return the complete "

@@ -34,6 +34,11 @@ export interface IngestedDocument {
   metadata: LiteratureMetadata;
 }
 
+export interface LiteratureDocument extends LiteratureMetadata {
+  document_id: string;
+  units_indexed: number;
+}
+
 export interface LiteratureCitation {
   unit_id: string;
   document_id: string;

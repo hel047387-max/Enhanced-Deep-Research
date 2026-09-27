@@ -15,6 +15,7 @@ from deep_research.domain.literature import (
 )
 from deep_research.infrastructure.docling_parser import DoclingParser, EmptyDocument
 from deep_research.infrastructure.embedding_provider import (
+    DashScopeEmbeddingProvider,
     SentenceTransformerEmbeddingProvider,
 )
 
@@ -69,6 +70,19 @@ class FakeEmbeddingModel:
         assert normalize_embeddings is True
         self.query_inputs.append(text)
         return SimpleNamespace(tolist=lambda: [0.0, 1.0, 0.0])
+
+
+def test_docling_parser_factory_uses_unicode_safe_pdf_backend() -> None:
+    from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
+    from docling.datamodel.base_models import InputFormat
+
+    parser = DoclingParser.from_model_name(
+        "sentence-transformers/all-MiniLM-L6-v2",
+        max_tokens=256,
+    )
+
+    pdf_options = parser._converter.format_to_options[InputFormat.PDF]
+    assert pdf_options.backend is PyPdfiumDocumentBackend
 
 
 @pytest.mark.asyncio
@@ -145,6 +159,58 @@ async def test_same_embedding_provider_encodes_documents_and_queries() -> None:
     assert query == [0.0, 1.0, 0.0]
     assert model.document_inputs == ["document"]
     assert model.query_inputs == ["query"]
+
+
+class FakeDashScopeClient:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    def call(self, **kwargs: object) -> object:
+        self.calls.append(kwargs)
+        return {
+            "status_code": 200,
+            "output": {"embeddings": [{"embedding": [0.6, 0.8]}]},
+        }
+
+
+@pytest.mark.asyncio
+async def test_dashscope_provider_uses_the_configured_model_for_documents_and_queries() -> None:
+    client = FakeDashScopeClient()
+    provider = DashScopeEmbeddingProvider(
+        client=client,
+        model_name="text-embedding-v3",
+        api_key="secret",
+        expected_dimension=2,
+    )
+
+    documents = await provider.embed_documents(["document"])
+    query = await provider.embed_query("query")
+
+    assert documents == [[0.6, 0.8]]
+    assert query == [0.6, 0.8]
+    assert provider.dimension == 2
+    assert [call["model"] for call in client.calls] == [
+        "text-embedding-v3",
+        "text-embedding-v3",
+    ]
+    assert all(call["api_key"] == "secret" for call in client.calls)
+
+
+class InvalidDashScopeClient:
+    def call(self, **kwargs: object) -> object:
+        return {"status_code": 200, "output": {"embeddings": [{"embedding": "bad"}]}}
+
+
+@pytest.mark.asyncio
+async def test_dashscope_provider_rejects_a_non_list_embedding_vector() -> None:
+    provider = DashScopeEmbeddingProvider(
+        client=InvalidDashScopeClient(),
+        model_name="text-embedding-v3",
+        api_key="secret",
+    )
+
+    with pytest.raises(TypeError, match="without vector values"):
+        await provider.embed_query("query")
 
 
 class StubParser:

@@ -15,9 +15,10 @@ from pydantic import BaseModel, Field
 
 from deep_research.domain.errors import ResearchError
 from deep_research.domain.events import EventType, ResearchEvent
-from deep_research.domain.evidence import EvidenceItem, Source
+from deep_research.domain.evidence import EvidenceItem, EvidenceSource
 from deep_research.domain.plan import ResearchBrief, ResearchTask
 from deep_research.domain.review import ReviewResult
+from deep_research.persistence.memory_store import MemoryStore
 from deep_research.persistence.run_store import RunStatus, RunStore
 from deep_research.services.cancellation import (
     CancellationRegistry,
@@ -101,18 +102,23 @@ class ResearchSnapshot(BaseModel, frozen=True):
     clarification: str | None = None
     research_brief: ResearchBrief | None = None
     tasks: dict[str, ResearchTask] = Field(default_factory=dict)
-    sources: dict[str, Source] = Field(default_factory=dict)
+    sources: dict[str, EvidenceSource] = Field(default_factory=dict)
     evidence: dict[str, EvidenceItem] = Field(default_factory=dict)
     review: ReviewResult | None = None
     report: str | None = None
+    memory_status: str | None = None
+    memory_references: list[dict[str, object]] = Field(default_factory=list)
+    memory_warning: str | None = None
     errors: list[ResearchError] = Field(default_factory=list)
 
 
-def _initial_state(run_id: str, thread_id: str, query: str) -> dict[str, object]:
+def _initial_state(run_id: str, thread_id: str, query: str, use_memory: bool = True, use_literature: bool = False) -> dict[str, object]:
     return {
         "run_id": run_id,
         "thread_id": thread_id,
         "messages": [query],
+        "use_memory": use_memory,
+        "use_literature": use_literature,
         "clarification_count": 0,
         "tasks": {},
         "sources": {},
@@ -153,21 +159,23 @@ class ResearchRuntime:
         run_store: RunStore,
         publisher: EventPublisher,
         cancellation: CancellationRegistry,
+        memory_store: MemoryStore | None = None,
     ) -> None:
         self._graph = graph
         self._run_store = run_store
         self._publisher = publisher
         self._cancellation = cancellation
+        self.memory_store = memory_store
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._streams: dict[str, AsyncIterator[ResearchEvent]] = {}
 
-    async def start(self, query: str) -> RunHandle:
+    async def start(self, query: str, use_memory: bool = True, use_literature: bool = False) -> RunHandle:
         """创建研究线程并异步启动首次执行。"""
         thread_id = str(uuid4())
         run_id = str(uuid4())
         self._cancellation.clear(thread_id)
         await self._run_store.create_run(run_id, thread_id)
-        return self._launch(run_id, thread_id, _initial_state(run_id, thread_id, query))
+        return self._launch(run_id, thread_id, _initial_state(run_id, thread_id, query, use_memory, use_literature))
 
     async def resume(self, thread_id: str, answer: str) -> RunHandle:
         """提交用户澄清回答并恢复暂停的研究线程。"""
@@ -201,8 +209,33 @@ class ResearchRuntime:
             evidence=values.get("evidence", {}),
             review=values.get("review_result"),
             report=values.get("final_report"),
+            memory_status=latest.memory_status,
+            memory_references=values.get("memory_references", []),
+            memory_warning=values.get("memory_warning"),
             errors=values.get("errors", []),
         )
+
+    async def recover_archives(self) -> None:
+        if self.memory_store is None:
+            return
+        for run in await self._run_store.list_unarchived_completed():
+            try:
+                snapshot = await self._graph.aget_state(self._config(run.thread_id))
+                values = snapshot.values or {}
+                if values.get("final_report"):
+                    await self.memory_store.archive(run.thread_id, run.run_id, dict(values))
+                    await self._run_store.update_memory_status(run.run_id, "saved")
+            except Exception as exc:  # noqa: BLE001 - recovery must continue for other threads
+                logger.error(
+                    "Archive recovery failed for %s: %s",
+                    run.thread_id, _safe_exception_message(exc),
+                )
+                try:
+                    await self._run_store.update_memory_status(
+                        run.run_id, "failed", "Memory save failed."
+                    )
+                except Exception:
+                    logger.exception("Could not record memory recovery failure")
 
     async def cancel(self, thread_id: str) -> None:
         """请求取消指定研究线程。"""
@@ -281,6 +314,28 @@ class ResearchRuntime:
             else:
                 status = RunStatus.COMPLETED
             terminal_status = status
+            if status is RunStatus.COMPLETED and result.get("final_report") and self.memory_store is not None:
+                try:
+                    await self.memory_store.archive(thread_id, run_id, result)
+                    await self._run_store.update_memory_status(run_id, "saved")
+                    await self._publisher.publish(
+                        EventType.MEMORY_SAVED, run_id, thread_id, {"status": "saved"}
+                    )
+                except Exception as exc:  # noqa: BLE001 - preserve completed report
+                    logger.error(
+                        "Memory save failed for %s: %s",
+                        thread_id, _safe_exception_message(exc),
+                    )
+                    try:
+                        await self._run_store.update_memory_status(
+                            run_id, "failed", "Memory save failed."
+                        )
+                    except Exception:
+                        logger.exception("Could not record memory save failure")
+                    await self._publisher.publish(
+                        EventType.MEMORY_SAVE_FAILED, run_id, thread_id,
+                        {"status": "failed", "message": "Memory save failed."},
+                    )
             if status is RunStatus.FAILED:
                 errors = result.get("errors", [])
                 error = errors[-1] if errors else ResearchError(

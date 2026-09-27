@@ -13,9 +13,30 @@ describe("App", () => {
     await wrapper.get('[data-testid="research-query"]').setValue("Compare bounded research agents");
     await wrapper.get('[data-testid="start-research"]').trigger("submit");
 
-    expect(start).toHaveBeenCalledWith("Compare bounded research agents");
+    expect(start).toHaveBeenCalledWith("Compare bounded research agents", true, false);
   });
 
+  it("can start without recalling previous research", async () => {
+    const start = vi.fn();
+    const wrapper = mount(App, { props: { store: createResearchStoreForTest({ start }) } });
+
+    await wrapper.get('[data-testid="use-memory"]').setValue(false);
+    await wrapper.get('[data-testid="research-query"]').setValue("A fresh study");
+    await wrapper.get('[data-testid="start-research"]').trigger("submit");
+
+    expect(start).toHaveBeenCalledWith("A fresh study", false, false);
+  });
+
+  it("can search indexed literature during research", async () => {
+    const start = vi.fn();
+    const wrapper = mount(App, { props: { store: createResearchStoreForTest({ start }) } });
+
+    await wrapper.get('[data-testid="use-literature"]').setValue(true);
+    await wrapper.get('[data-testid="research-query"]').setValue("Use my papers");
+    await wrapper.get('[data-testid="start-research"]').trigger("submit");
+
+    expect(start).toHaveBeenCalledWith("Use my papers", true, true);
+  });
   it("becomes busy immediately and ignores a second start while the first request is pending", async () => {
     const pending: Array<() => void> = [];
     const api = {
@@ -82,7 +103,7 @@ describe("App", () => {
         },
       },
       sources: {
-        s1: { sourceId: "s1", url: "https://example.com/report", title: "Market report", domain: "example.com", publishedAt: null, sourceType: "web" },
+        s1: { sourceId: "s1", sourceKind: "web", url: "https://example.com/report", title: "Market report", domain: "example.com", publishedAt: null, sourceType: "web" },
       },
       evidence: {
         e1: { evidenceId: "e1", taskId: "a", sourceId: "s1", claim: "A supported claim", excerpt: "Evidence excerpt", context: "Context", relevance: "high", discoveredInRound: 1, citationLabel: "1" },

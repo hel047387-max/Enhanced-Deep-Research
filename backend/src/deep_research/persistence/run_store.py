@@ -7,6 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+#不保存完整研究内容，只保存轻量的运行记录。
 
 class RunStatus(StrEnum):
     CREATED = "created"
@@ -25,6 +26,8 @@ class RunMetadata(BaseModel, frozen=True):
     updated_at: datetime
     cancelled_at: datetime | None = None
     last_error: str | None = None
+    memory_status: str | None = None
+    memory_error: str | None = None
 
 
 def _aiosqlite() -> Any:
@@ -55,6 +58,8 @@ def _metadata(row: Any) -> RunMetadata:
             else None
         ),
         last_error=row["last_error"],
+        memory_status=row["memory_status"],
+        memory_error=row["memory_error"],
     )
 
 
@@ -77,12 +82,20 @@ class RunStore:
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
                     cancelled_at TEXT,
-                    last_error TEXT
+                    last_error TEXT,
+                    memory_status TEXT,
+                    memory_error TEXT
                 );
                 CREATE INDEX IF NOT EXISTS idx_research_runs_thread_updated
                 ON research_runs(thread_id, updated_at DESC);
                 """
             )
+            cursor = await connection.execute("PRAGMA table_info(research_runs)")
+            columns = {row[1] for row in await cursor.fetchall()}
+            if "memory_status" not in columns:
+                await connection.execute("ALTER TABLE research_runs ADD COLUMN memory_status TEXT")
+            if "memory_error" not in columns:
+                await connection.execute("ALTER TABLE research_runs ADD COLUMN memory_error TEXT")
             await connection.commit()
 
     async def create_run(self, run_id: str, thread_id: str) -> RunMetadata:
@@ -130,6 +143,30 @@ class RunStore:
             raise RuntimeError("run metadata disappeared after update")
         return updated
 
+    async def update_memory_status(
+        self, run_id: str, status: str, error: str | None = None
+    ) -> None:
+        sqlite = _aiosqlite()
+        async with sqlite.connect(self.path) as connection:
+            await connection.execute(
+                "UPDATE research_runs SET memory_status = ?, memory_error = ? WHERE run_id = ?",
+                (status, error, run_id),
+            )
+            await connection.commit()
+
+    async def list_unarchived_completed(self) -> list[RunMetadata]:
+        sqlite = _aiosqlite()
+        async with sqlite.connect(self.path) as connection:
+            connection.row_factory = sqlite.Row
+            cursor = await connection.execute(
+                """SELECT * FROM research_runs
+                   WHERE status = 'completed'
+                     AND COALESCE(memory_status, 'pending') <> 'saved'
+                   ORDER BY updated_at DESC"""
+            )
+            rows = await cursor.fetchall()
+        return [_metadata(row) for row in rows]
+
     async def get_run(self, run_id: str) -> RunMetadata | None:
         return await self._fetch_one(
             "SELECT * FROM research_runs WHERE run_id = ?",
@@ -146,7 +183,7 @@ class RunStore:
             """,
             (thread_id,),
         )
-
+#执行一条带参数的 SQL 查询，读取第一行结果，将其转换成 RunMetadata；如果没查到则返回 None。
     async def _fetch_one(
         self,
         statement: str,

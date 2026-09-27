@@ -5,7 +5,7 @@ from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 
 from deep_research.domain.errors import ResearchError
-from deep_research.domain.evidence import EvidenceItem, Source
+from deep_research.domain.evidence import EvidenceItem, EvidenceSource
 from deep_research.domain.plan import GapAssessment, ResearchBrief, ResearchTask
 from deep_research.domain.review import ReportDraft, ReviewResult
 from deep_research.state.reducers import (
@@ -16,6 +16,7 @@ from deep_research.state.reducers import (
     merge_tasks,
 )
 
+#规定研究状态
 ResearchStatus = Literal[
     "created",
     "running",
@@ -37,8 +38,13 @@ class ResearchState(TypedDict, total=False):
     review_incomplete: NotRequired[bool]
     clarification_assumptions: NotRequired[list[str]]
     research_brief: NotRequired[ResearchBrief | None]
+    use_memory: NotRequired[bool]
+    use_literature: NotRequired[bool]
+    memory_context: NotRequired[dict[str, object]]
+    memory_references: NotRequired[list[dict[str, object]]]
+    memory_warning: NotRequired[str | None]
     tasks: NotRequired[Annotated[dict[str, ResearchTask], merge_tasks]]
-    sources: NotRequired[Annotated[dict[str, Source], merge_sources]]
+    sources: NotRequired[Annotated[dict[str, EvidenceSource], merge_sources]]
     evidence: NotRequired[Annotated[dict[str, EvidenceItem], merge_evidence]]
     gap_assessments: NotRequired[Annotated[dict[str, GapAssessment], merge_gap_assessments]]
     supervisor_added_tasks: NotRequired[int]

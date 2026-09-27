@@ -2,6 +2,9 @@ import type {
   ResearchEvent,
   ResearchEventType,
   ResearchSnapshot,
+  ArchiveSummary,
+  ArchiveDetail,
+  MemorySearchResult,
 } from "../types/research";
 
 const API_ROOT = "/api/v1/research";
@@ -11,6 +14,9 @@ const EVENT_TYPES = new Set<ResearchEventType>([
   "clarification_required",
   "research_brief_created",
   "plan_created",
+  "memory_recalled",
+  "memory_saved",
+  "memory_save_failed",
   "task_started",
   "search_started",
   "search_completed",
@@ -145,7 +151,7 @@ export async function parseSseStream(
 
 async function streamRequest(
   path: string,
-  body: Record<string, string>,
+  body: Record<string, string | boolean>,
   onEvent: ResearchEventHandler,
   signal: AbortSignal,
 ): Promise<void> {
@@ -167,8 +173,10 @@ export function startResearch(
   query: string,
   onEvent: ResearchEventHandler,
   signal: AbortSignal,
+  useMemory = true,
+  useLiterature = false,
 ): Promise<void> {
-  return streamRequest("/stream", { query }, onEvent, signal);
+  return streamRequest("/stream", { query, use_memory: useMemory, use_literature: useLiterature }, onEvent, signal);
 }
 
 export function resumeResearch(
@@ -195,4 +203,25 @@ export async function getSnapshot(threadId: string): Promise<ResearchSnapshot> {
   });
   if (!response.ok) throw await apiError(response);
   return (await response.json()) as ResearchSnapshot;
+}
+
+const MEMORY_ROOT = "/api/v1/memories";
+
+export async function listArchives(offset = 0): Promise<ArchiveSummary[]> {
+  const response = await fetch(`${MEMORY_ROOT}/researches?limit=20&offset=${offset}`);
+  if (!response.ok) throw await apiError(response);
+  const body = (await response.json()) as { items: ArchiveSummary[] };
+  return body.items;
+}
+
+export async function getArchive(threadId: string): Promise<ArchiveDetail> {
+  const response = await fetch(`${MEMORY_ROOT}/researches/${encodeURIComponent(threadId)}`);
+  if (!response.ok) throw await apiError(response);
+  return (await response.json()) as ArchiveDetail;
+}
+
+export async function searchMemory(query: string): Promise<MemorySearchResult> {
+  const response = await fetch(`${MEMORY_ROOT}/search?q=${encodeURIComponent(query)}`);
+  if (!response.ok) throw await apiError(response);
+  return (await response.json()) as MemorySearchResult;
 }

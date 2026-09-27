@@ -8,30 +8,31 @@ from deep_research.llm import StructuredModel
 from deep_research.prompts.scope import clarification_prompt, research_brief_prompt
 
 
+#保存模型对“是否需要向用户追问”的判断，并保证当需要追问时，必须存在有效问题
 class ClarificationDecision(BaseModel, frozen=True):
     needs_clarification: bool
-    question: str | None = None
+    question: str | None = None#可以是字符串，也可以是 None，默认值是 None。
     reason: str
 
-    @field_validator("question")
+    @field_validator("question")#单独验证question字段，要求验证器是类方法
     @classmethod
-    def normalize_question(cls, value: str | None) -> str | None:
+    def normalize_question(cls, value: str | None) -> str | None:#可以是字符串，也可以是 None，但必须传值
         if value is None:
             return None
         normalized = value.strip()
         return normalized or None
 
-    @model_validator(mode="after")
-    def required_question_is_present(self) -> "ClarificationDecision":
+    @model_validator(mode="after")#在模型创建完成后执行，用于校验多个字段之间的关系是否合理。
+    def required_question_is_present(self) -> "ClarificationDecision":#返回一个 ClarificationDecision 类型的对象。
         if self.needs_clarification and self.question is None:
-            raise ValueError("a required clarification must include a non-empty question")
+            raise ValueError("a required clarification must include a non-empty question")#二选一
         return self
 
-
+#把列表里的所有内容统一转换成 LangChain 的消息对象。
 def _messages(values: list[Any]) -> list[BaseMessage]:
     return [value if isinstance(value, BaseMessage) else HumanMessage(content=str(value)) for value in values]
 
-
+#判断“用户的需求够不够清楚”。三种情况
 async def clarify_request(
     state: dict[str, Any],
     model: StructuredModel,
@@ -50,7 +51,7 @@ async def clarify_request(
         return {"clarification_assumptions": [decision.reason], "status": "running"}
     return {"status": "running"}
 
-
+#把已经足够清楚的需求整理成 Planner 能使用的数据
 async def write_research_brief(
     state: dict[str, Any],
     model: StructuredModel,

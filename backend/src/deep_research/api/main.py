@@ -13,7 +13,7 @@ from deep_research.api.literature_routes import (
 from deep_research.api.literature_routes import (
     router as literature_router,
 )
-from deep_research.api.routes import health_router, router
+from deep_research.api.routes import health_router, memory_router, router
 from deep_research.config import Settings, get_settings
 from deep_research.domain.plan import (
     CoverageDecision,
@@ -27,6 +27,7 @@ from deep_research.llm import create_structured_model
 from deep_research.nodes.clarify import ClarificationDecision
 from deep_research.nodes.researcher import EvidenceExtraction
 from deep_research.persistence.checkpoint import checkpoint_context
+from deep_research.persistence.memory_store import MemoryStore
 from deep_research.persistence.run_store import RunStore
 from deep_research.services.cancellation import CancellationRegistry
 from deep_research.services.event_stream import EventPublisher
@@ -55,6 +56,8 @@ def _production_dependencies(
     settings: Settings,
     publisher: EventPublisher,
     cancellation: CancellationRegistry,
+    memory_store: MemoryStore | None = None,
+    literature_adapter: Any | None = None,
 ) -> WorkflowDependencies:
     if not settings.tavily_api_key:
         raise RuntimeError("TAVILY_API_KEY is required to start the research API.")
@@ -73,6 +76,8 @@ def _production_dependencies(
         budgets=settings.budgets,
         event_sink=RuntimeEventSink(publisher),
         cancellation_checker=RuntimeCancellationChecker(cancellation),
+        memory_store=memory_store,
+        literature_adapter=literature_adapter,
     )
 
 
@@ -98,6 +103,10 @@ def _production_literature_application(
         QueryEnhancer,
     )
     from deep_research.application.query_router import QueryRouter
+    from deep_research.application.research_adapter import (
+        LiteratureEvidenceExtraction,
+        ResearchAdapter,
+    )
     from deep_research.application.retriever import LiteratureRetriever
     from deep_research.domain.literature import QueryDecision
     from deep_research.infrastructure.cross_encoder_reranker import (
@@ -105,6 +114,7 @@ def _production_literature_application(
     )
     from deep_research.infrastructure.docling_parser import DoclingParser
     from deep_research.infrastructure.embedding_provider import (
+        DashScopeEmbeddingProvider,
         SentenceTransformerEmbeddingProvider,
     )
     from deep_research.infrastructure.qdrant_index import QdrantLiteratureIndex
@@ -112,13 +122,27 @@ def _production_literature_application(
     client = AsyncQdrantClient(
         url=settings.qdrant_url,
         api_key=settings.qdrant_api_key,
+        timeout=settings.qdrant_timeout,
     )
-    index = QdrantLiteratureIndex(client, settings.qdrant_collection)
-    embedder = SentenceTransformerEmbeddingProvider.from_model_name(
-        settings.rag_embedding_model
+    index = QdrantLiteratureIndex(
+        client,
+        settings.qdrant_collection,
+        distance=settings.qdrant_distance,
     )
+    if settings.embed_model_type == "dashscope":
+        embedder = DashScopeEmbeddingProvider.from_model_name(
+            settings.embedding_model_name,
+            api_key=settings.embed_api_key,
+            base_url=settings.embed_base_url,
+            expected_dimension=settings.qdrant_vector_size,
+        )
+    else:
+        embedder = SentenceTransformerEmbeddingProvider.from_model_name(
+            settings.embedding_model_name,
+            expected_dimension=settings.qdrant_vector_size,
+        )
     parser = DoclingParser.from_model_name(
-        settings.rag_embedding_model,
+        settings.rag_chunk_tokenizer_model,
         max_tokens=settings.rag_chunk_max_tokens,
     )
     reranker = SentenceTransformerReranker.from_model_name(
@@ -146,6 +170,10 @@ def _production_literature_application(
                 retriever,
                 ContextBuilder(index, max_chars=settings.rag_context_max_chars),
                 create_structured_model(settings, LiteratureAnswerDraft),
+            ),
+            research_adapter=ResearchAdapter(
+                retriever,
+                create_structured_model(settings, LiteratureEvidenceExtraction),
             ),
         ),
         client,
@@ -188,9 +216,11 @@ def create_app(
                 if owned_literature_client is not None:
                     await owned_literature_client.close()
             return
-
+#生成器函数的 return，不能带返回值（或者返回值会被直接忽略），return 的唯一作用就是：终止这个生成器，结束函数。
         store = RunStore(resolved_settings.checkpoint_db_path)
         await store.initialize()
+        memory_store = MemoryStore(resolved_settings.checkpoint_db_path)
+        await memory_store.initialize()
         publisher = EventPublisher()
         cancellation = CancellationRegistry()
         async with checkpoint_context(resolved_settings.checkpoint_db_path) as checkpointer:
@@ -199,6 +229,12 @@ def create_app(
                     resolved_settings,
                     publisher,
                     cancellation,
+                    memory_store,
+                    literature_adapter=getattr(
+                        getattr(application.state, "literature_application", None),
+                        "research_adapter",
+                        None,
+                    ),
                 ),
                 checkpointer=checkpointer,
             )
@@ -207,8 +243,10 @@ def create_app(
                 store,
                 publisher,
                 cancellation,
+                memory_store,
             )
             application.state.runtime = owned_runtime
+            await owned_runtime.recover_archives()
             try:
                 yield
             finally:
@@ -232,6 +270,7 @@ def create_app(
     )
     application.include_router(router)
     application.include_router(literature_router)
+    application.include_router(memory_router)
     application.include_router(health_router)
     application.state.rag_max_upload_bytes = resolved_settings.rag_max_upload_bytes
     if runtime is not None:

@@ -5,7 +5,7 @@ from pydantic import AnyHttpUrl, BaseModel
 if TYPE_CHECKING:
     from tavily import AsyncTavilyClient
 
-
+#SearchProvider 是规则/接口，TavilySearchProvider 是具体实现。
 class SearchHit(BaseModel, frozen=True):
     title: str
     url: AnyHttpUrl
@@ -13,7 +13,7 @@ class SearchHit(BaseModel, frozen=True):
     raw_content: str | None = None
 
 
-class SearchProvider(Protocol):
+class SearchProvider(Protocol): # 它不真正执行搜索，只规定必须有下面这个 search 方法
     async def search(self, query: str, max_results: int) -> list[SearchHit]: ...
 
 
@@ -23,7 +23,8 @@ class TavilySearchProvider:
 
     @classmethod
     def from_api_key(cls, api_key: str) -> "TavilySearchProvider":
-        try:
+        try:#外部可以创建实例provider = TavilySearchProvider.from_api_key(api_key)
+            #from_api_key已经帮忙调用了AsyncTavilyClient
             from tavily import AsyncTavilyClient
         except ImportError:
             raise RuntimeError(

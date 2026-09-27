@@ -22,6 +22,9 @@ export type ResearchEventType =
   | "clarification_required"
   | "research_brief_created"
   | "plan_created"
+  | "memory_recalled"
+  | "memory_saved"
+  | "memory_save_failed"
   | "task_started"
   | "search_started"
   | "search_completed"
@@ -63,8 +66,9 @@ export interface ResearchTaskWire {
   error: string | null;
 }
 
-export interface SourceWire {
+export interface WebSourceWire {
   source_id: string;
+  source_kind?: "web";
   url: string;
   canonical_url: string;
   title: string;
@@ -74,6 +78,23 @@ export interface SourceWire {
   content_hash: string;
   source_type: "web" | "official" | "news";
 }
+
+export interface LiteratureSourceWire {
+  source_id: string;
+  source_kind: "literature";
+  document_id: string;
+  unit_id: string;
+  title: string;
+  authors: string[];
+  publication_year: number | null;
+  doi: string | null;
+  heading_path: string[];
+  page_start: number | null;
+  page_end: number | null;
+  retrieved_at: string;
+}
+
+export type SourceWire = WebSourceWire | LiteratureSourceWire;
 
 export interface EvidenceWire {
   evidence_id: string;
@@ -125,6 +146,9 @@ export interface ResearchSnapshot {
   evidence: Record<string, EvidenceWire>;
   review: ReviewResultWire | null;
   report: string | null;
+  memory_status?: "saved" | "failed" | null;
+  memory_references?: HistoricalResearchReference[];
+  memory_warning?: string | null;
   errors: ResearchErrorWire[];
 }
 
@@ -133,6 +157,9 @@ export interface ResearchEventPayloads {
   clarification_required: { question: string };
   research_brief_created: { brief: ResearchBriefWire };
   plan_created: { task_count: number; tasks: ResearchTaskWire[] };
+  memory_recalled: { researches: HistoricalResearchReference[]; warning?: string };
+  memory_saved: { status: "saved" };
+  memory_save_failed: { status: "failed"; message: string };
   task_started: { task_id: string };
   search_started: { task_id: string; round: number; query_count: number };
   search_completed: {
@@ -192,6 +219,37 @@ export type ResearchEvent<K extends ResearchEventType = ResearchEventType> = {
   };
 }[K];
 
+export interface HistoricalResearchReference {
+  thread_id: string;
+  question: string;
+  completed_at: string;
+  summary: string;
+  limitations: string[];
+  source_urls: string[];
+}
+
+export interface ArchiveSummary {
+  thread_id: string;
+  run_id?: string;
+  question: string;
+  completed_at: string;
+  archive_status?: string;
+}
+
+export interface ArchiveDetail extends ArchiveSummary {
+  brief: ResearchBriefWire;
+  draft: { title: string; limitations: string[] };
+  report: string;
+  sources: SourceWire[];
+  evidence: EvidenceWire[];
+  cards: Array<{ card_id: string; card_type: string; text: string; evidence_ids: string[] }>;
+}
+
+export interface MemorySearchResult {
+  researches: ArchiveSummary[];
+  cards: Array<{ card_id: string; thread_id: string; card_type: string; text: string }>;
+}
+
 export interface ResearchBriefView {
   mainQuestion: string;
   scope: string;
@@ -218,11 +276,16 @@ export interface ResearchTaskView {
 
 export interface SourceView {
   sourceId: string;
-  url: string;
+  sourceKind: "web" | "literature";
+  url: string | null;
   title: string;
-  domain: string;
+  domain: string | null;
   publishedAt: string | null;
-  sourceType: "web" | "official" | "news";
+  sourceType: "web" | "official" | "news" | "literature";
+  authors?: string[];
+  headingPath?: string[];
+  pageStart?: number | null;
+  pageEnd?: number | null;
 }
 
 export interface EvidenceView {
@@ -265,6 +328,9 @@ export interface ResearchUIState {
   evidence: Record<string, EvidenceView>;
   review: ReviewView | null;
   report: string;
+  memoryStatus: "saved" | "failed" | null;
+  memoryReferences: HistoricalResearchReference[];
+  memoryWarning: string | null;
   progressEvents: ResearchEvent[];
   error: string | null;
   lastSequence: number;

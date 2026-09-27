@@ -1,6 +1,7 @@
 import type {
   IngestedDocument,
   LiteratureAnswer,
+  LiteratureDocument,
   LiteratureMetadata,
   LiteratureQueryOptions,
   LiteratureSearchResponse,
@@ -24,6 +25,7 @@ async function requestJson<T>(input: RequestInfo, init?: RequestInit): Promise<T
 }
 
 export interface LiteratureApiClient {
+  listDocuments(): Promise<LiteratureDocument[]>;
   uploadDocument(file: File, metadata?: Partial<LiteratureMetadata>): Promise<IngestedDocument>;
   searchLiterature(query: string, options?: LiteratureQueryOptions): Promise<LiteratureSearchResponse>;
   answerLiterature(query: string, options?: LiteratureQueryOptions): Promise<LiteratureAnswer>;
@@ -31,6 +33,10 @@ export interface LiteratureApiClient {
 }
 
 export const literatureApi: LiteratureApiClient = {
+  listDocuments() {
+    return requestJson<LiteratureDocument[]>(`${ROOT}/documents`);
+  },
+
   async uploadDocument(file, metadata) {
     const body = new FormData();
     body.append("file", file);

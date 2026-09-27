@@ -3,7 +3,9 @@ import { computed } from "vue";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 
-const props = defineProps<{ markdown: string }>();
+const props = withDefaults(defineProps<{ markdown: string; headingId?: string; title?: string }>(), {
+  headingId: "report-heading", title: "Research report",
+});
 
 function safeMarkdown(markdown: string): string {
   const parsed = marked.parse(markdown) as string;
@@ -34,9 +36,9 @@ const rendered = computed(() => safeMarkdown(props.markdown));
 </script>
 
 <template>
-  <section v-if="markdown" class="panel report-panel" aria-labelledby="report-heading">
+  <section v-if="markdown" class="panel report-panel"  :aria-labelledby="headingId">
     <p class="eyebrow">Final output</p>
-    <h2 id="report-heading">Research report</h2>
+    <h2 :id="headingId">{{ title }}</h2>
     <div data-testid="report-html" class="report-content" v-html="rendered" />
   </section>
 </template>

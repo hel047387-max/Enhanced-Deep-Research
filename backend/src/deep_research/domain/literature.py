@@ -105,7 +105,7 @@ class LiteratureSearchRequest(BaseModel, frozen=True):
         str,
         StringConstraints(strip_whitespace=True, min_length=1, max_length=10_000),
     ]
-    limit: int = Field(default=8, ge=1, le=50)
+    limit: int = Field(default=3, ge=1, le=50)
     filters: LiteratureFilter = Field(default_factory=LiteratureFilter)
 
 
@@ -119,6 +119,11 @@ class IngestedDocument(BaseModel, frozen=True):
     document_id: UUID
     units_indexed: int = Field(ge=1)
     metadata: LiteratureMetadata
+
+
+class LiteratureDocument(LiteratureMetadata, frozen=True):
+    document_id: UUID
+    units_indexed: int = Field(ge=1)
 
 
 class LiteratureCitation(BaseModel, frozen=True):
@@ -180,6 +185,8 @@ class LiteratureIndex(Protocol):
     ) -> list[RetrievedUnit]: ...
 
     async def retrieve(self, unit_ids: list[UUID]) -> list[SearchableUnit]: ...
+
+    async def list_documents(self) -> list[LiteratureDocument]: ...
 
     async def delete_document(self, document_id: UUID) -> None: ...
 

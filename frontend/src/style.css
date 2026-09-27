@@ -87,3 +87,98 @@ blockquote { margin: 10px 0; padding-left: 12px; border-left: 2px solid #9fb1a5;
   .panel { padding: 19px; border-radius: 14px; }
   .task-grid, .brief-grid { grid-template-columns: 1fr; }
 }
+
+.history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.history-search {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.history-search label {
+  width: 100%;
+}
+
+.history-search input {
+  flex: 1 1 16rem;
+}
+
+.history-list {
+  list-style: none;
+  padding: 0;
+}
+
+.history-list li {
+  margin: 0.5rem 0;
+}
+
+.history-link {
+  width: 100%;
+  text-align: left;
+}
+
+.history-link small {
+  margin-left: 0.5rem;
+}
+
+.history-detail,
+.memory-cards,
+.memory-leads {
+  margin-top: 1.25rem;
+}
+
+.memory-choice {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.literature-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.literature-grid h3 { margin-bottom: 6px; }
+.literature-results { display: grid; gap: 10px; margin-top: 20px; }
+.literature-result { padding: 16px; border: 1px solid #d2d7ce; border-radius: 13px; background: #fbfbf7; }
+.literature-result div { display: flex; justify-content: space-between; gap: 12px; }
+.literature-result small { color: #667168; }
+.literature-result p { color: #526057; line-height: 1.5; }
+.literature-answer { margin-top: 20px; padding: 18px; border-left: 3px solid #ed7a3b; background: #f3f4ee; }
+.literature-answer ol { margin-bottom: 0; padding-left: 20px; }
+.literature-answer li { margin-top: 8px; }
+.literature-answer li span { display: block; color: #667168; font-size: .82rem; }
+.compact { padding: 7px 12px; font-size: .78rem; color: #415047; }
+
+@media (max-width: 860px) {
+  .literature-grid { grid-template-columns: 1fr; }
+}
+
+.document-picker { display: grid; gap: 8px; margin: 0; padding: 12px; border: 1px solid #d2d7ce; border-radius: 12px; }
+.document-picker legend { padding: 0 5px; font-size: .82rem; font-weight: 750; }
+.document-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid #e4e7e0; }
+.document-row:last-of-type { border-bottom: 0; }
+.document-row label { display: flex; align-items: flex-start; gap: 9px; min-width: 0; }
+.document-row input { width: auto; margin-top: 3px; }
+.document-row span { display: grid; gap: 3px; min-width: 0; }
+.document-row strong, .document-row small { overflow-wrap: anywhere; }
+.document-row small, .scope-help { color: #667168; }
+.result-limit { display: flex; align-items: center; gap: 10px; }
+.result-limit select { border: 1px solid #9da99f; border-radius: 8px; padding: 7px 28px 7px 10px; background: #fffefa; color: #17211b; }
+.startup-shell { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+.startup-card { width: min(560px, 100%); padding: 32px; border: 1px solid #c3cac0; border-radius: 18px; background: #ffffffd9; box-shadow: 0 18px 45px #37433a1a; }
+.startup-card h1 { margin: 6px 0 24px; font: 500 clamp(2rem, 7vw, 3.8rem)/1 Georgia, serif; letter-spacing: -.04em; }
+.progress-status { margin-bottom: 20px; padding: 14px 16px; border: 1px solid #cbd3c9; border-radius: 12px; background: #f8f9f4; }
+.progress-copy { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 9px; }
+.progress-copy span { color: #346651; font-variant-numeric: tabular-nums; font-weight: 800; }
+.progress-track { height: 8px; overflow: hidden; border-radius: 999px; background: #dfe5dd; }
+.progress-fill { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #346651, #ed7a3b); transition: width .35s ease; }
+.progress-fill.indeterminate { width: 42%; animation: progress-sweep 1.25s ease-in-out infinite; }
+.progress-status small { display: block; margin-top: 8px; color: #667168; }
+.rag-progress { margin: 18px 0; }
+@keyframes progress-sweep { from { transform: translateX(-115%); } to { transform: translateX(340%); } }
+@media (prefers-reduced-motion: reduce) { .progress-fill.indeterminate { animation-duration: 2.5s; } }

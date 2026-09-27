@@ -13,5 +13,7 @@ def planning_prompt(source_preferences: list[str]) -> str:
         "one or two initial queries. Exclude report-writing tasks and do not invent user "
         "constraints. Current date: "
         f"{datetime.now(UTC).date().isoformat()}. Source preferences: "
-        f"{preferences}. Do not provide hidden reasoning."
+        f"{preferences}. Historical research is planning context only; verify its leads "
+        "with fresh searches and do not treat old citations as current evidence. "
+        "Do not provide hidden reasoning."
     )

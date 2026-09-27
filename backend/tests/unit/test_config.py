@@ -81,3 +81,20 @@ def test_rag_settings_reject_invalid_limits() -> None:
 def test_rag_settings_keep_top_k_within_candidate_limit() -> None:
     with pytest.raises(ValidationError):
         Settings(_env_file=None, rag_candidate_limit=4, rag_top_k=5)
+
+
+def test_embedding_provider_defaults_depend_on_the_selected_service() -> None:
+    cloud = Settings(_env_file=None, embed_model_type="dashscope")
+    local = Settings(_env_file=None, embed_model_type="local")
+
+    assert cloud.embedding_model_name == "text-embedding-v3"
+    assert local.embedding_model_name == "sentence-transformers/all-MiniLM-L6-v2"
+
+
+def test_embedding_provider_rejects_an_unknown_service() -> None:
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, embed_model_type="unknown")
+
+
+def test_rag_defaults_return_three_results() -> None:
+    assert Settings(_env_file=None).rag_top_k == 3

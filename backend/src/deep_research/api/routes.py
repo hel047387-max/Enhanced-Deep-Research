@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import AsyncIterator
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 
 from deep_research.api.schemas import (
@@ -74,7 +74,7 @@ async def start_stream(
     request: Request,
 ) -> StreamingResponse:
     """启动新研究并返回实时事件流；请求体中的 query 是研究问题。"""
-    handle = await _runtime(request).start(body.query)
+    handle = await _runtime(request).start(body.query, use_memory=body.use_memory, use_literature=body.use_literature)
     return _stream(handle)
 
 
@@ -144,6 +144,44 @@ async def cancel_research(
     except ResearchThreadNotFound as exc:
         raise HTTPException(status_code=404, detail="Research thread was not found.") from exc
     return CancellationResponse(thread_id=thread_id)
+
+
+memory_router = APIRouter(prefix="/api/v1/memories")
+
+
+def _memory_store(request: Request):
+    store = _runtime(request).memory_store
+    if store is None:
+        raise HTTPException(status_code=503, detail="Research memory is unavailable.")
+    return store
+
+
+@memory_router.get("/researches")
+async def list_research_archives(
+    request: Request,
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+):
+    return {"items": await _memory_store(request).list_archives(limit=limit, offset=offset)}
+
+
+@memory_router.get("/search")
+async def search_research_memory(
+    request: Request,
+    q: str = Query(min_length=1, max_length=200),
+    limit: int = Query(20, ge=1, le=50),
+):
+    return await _memory_store(request).search(
+        q, max_researches=limit, max_cards=10
+    )
+
+
+@memory_router.get("/researches/{thread_id}")
+async def get_research_archive(thread_id: str, request: Request):
+    detail = await _memory_store(request).get_archive(thread_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Research archive was not found.")
+    return detail
 
 
 health_router = APIRouter()

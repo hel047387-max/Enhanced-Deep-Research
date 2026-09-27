@@ -4,6 +4,7 @@ from typing import Any
 from uuid import UUID
 
 from deep_research.domain.literature import (
+    LiteratureDocument,
     LiteratureFilter,
     RetrievedUnit,
     SearchableUnit,
@@ -16,6 +17,7 @@ class QdrantLiteratureIndex:
         client: Any,
         collection_name: str,
         *,
+        distance: str = "cosine",
         models_module: Any | None = None,
     ) -> None:
         if models_module is None:
@@ -28,6 +30,12 @@ class QdrantLiteratureIndex:
         self._client = client
         self._collection_name = collection_name
         self._models = models_module
+        distances = {
+            "cosine": self._models.Distance.COSINE,
+            "dot": self._models.Distance.DOT,
+            "euclid": self._models.Distance.EUCLID,
+        }
+        self._distance = distances[distance]
 
     async def ensure_collection(self, vector_size: int) -> None:
         if await self._client.collection_exists(self._collection_name):
@@ -36,7 +44,7 @@ class QdrantLiteratureIndex:
             collection_name=self._collection_name,
             vectors_config=self._models.VectorParams(
                 size=vector_size,
-                distance=self._models.Distance.COSINE,
+                distance=self._distance,
             ),
         )
 
@@ -97,6 +105,47 @@ class QdrantLiteratureIndex:
             SearchableUnit.model_validate(point.payload)
             for point in points
         ]
+
+    async def list_documents(self) -> list[LiteratureDocument]:
+        if not await self._client.collection_exists(self._collection_name):
+            return []
+
+        units_by_document: dict[UUID, tuple[SearchableUnit, int]] = {}
+        offset: Any | None = None
+        while True:
+            points, next_offset = await self._client.scroll(
+                collection_name=self._collection_name,
+                scroll_filter=None,
+                limit=256,
+                offset=offset,
+                with_payload=True,
+                with_vectors=False,
+            )
+            for point in points:
+                unit = SearchableUnit.model_validate(point.payload)
+                first, count = units_by_document.get(
+                    unit.document_id,
+                    (unit, 0),
+                )
+                units_by_document[unit.document_id] = (first, count + 1)
+            if next_offset is None:
+                break
+            offset = next_offset
+
+        documents = [
+            LiteratureDocument(
+                document_id=document_id,
+                title=unit.title,
+                authors=unit.authors,
+                publication_year=unit.publication_year,
+                doi=unit.doi,
+                language=unit.language,
+                tags=unit.tags,
+                units_indexed=count,
+            )
+            for document_id, (unit, count) in units_by_document.items()
+        ]
+        return sorted(documents, key=lambda item: (item.title.casefold(), str(item.document_id)))
 
     async def delete_document(self, document_id: UUID) -> None:
         selector = self._models.FilterSelector(

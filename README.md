@@ -134,6 +134,34 @@ Each run has one in-process subscriber and a bounded event queue. Events carry a
 
 The API supports start, one clarification/resume on the same thread, snapshot restoration, report retrieval, and cancellation under `/api/v1/research`. SSE history replay is not supported; refresh recovery uses the latest committed snapshot rather than replaying past events.
 
+## Research memory
+
+Completed runs with a final report are saved to the same SQLite database as the
+LangGraph checkpoints. An archive contains the final Markdown, structured draft,
+brief, sources, short evidence excerpts, and evidence-linked conclusion cards.
+Limitations and unresolved questions are separate cards. The archive write is
+transactional and idempotent by thread and report hash.
+
+A new run searches up to three older studies and five cards after the research
+brief is ready. The planner receives brief historical leads; the writer and
+citation validator continue to use only evidence collected in the current run.
+Set `use_memory: false` in `POST /api/v1/research/stream` to skip recall while
+still saving the finished study. The frontend offers the same switch.
+
+- `GET /api/v1/memories/researches?limit=20&offset=0`: paged history, newest first.
+- `GET /api/v1/memories/researches/{thread_id}`: archived report, sources,
+  evidence, cards, and limitations.
+- `GET /api/v1/memories/search?q=...`: topic and card search. FTS5 handles
+  longer terms; short Chinese terms use ordinary matching.
+
+The `memory_saved` and `memory_save_failed` SSE events report persistence
+separately from research completion. A failed archive does not discard the
+report. If historical lookup fails, the current research continues and shows a
+warning. At startup, completed runs without a saved archive are retried from
+their checkpoints. Checkpoints remain on the existing retention policy; archive
+deletion, card expiry, and checkpoint cleanup are later-phase work. The current
+memory store is local and single-user.
+
 ## Literature RAG
 
 The optional literature library parses PDF, DOCX, Markdown, HTML, and text files with Docling, keeps headings, pages, content type, neighbors, and supplied bibliographic metadata in each searchable unit, and stores one vector plus the complete unit payload in Qdrant. It does not add RAG tables to SQLite.
@@ -146,7 +174,7 @@ python -m pip install -e ".[dev,rag]"
 docker run --name deep-research-qdrant -p 6333:6333 -p 6334:6334 -v qdrant_storage:/qdrant/storage qdrant/qdrant:v1.12.5
 ```
 
-Set `RAG_ENABLED=true` in `backend/.env`. The first startup downloads the configured embedding and reranker models. Document and query embeddings use the same model. Upload processing is synchronous: a failed request writes no successful import record and must be submitted again.
+Set `RAG_ENABLED=true` in `backend/.env`. Qdrant Cloud is the recommended default: set `QDRANT_URL`, `QDRANT_API_KEY`, and `EMBED_MODEL_TYPE=dashscope`, then set `EMBED_API_KEY`. For local mode, set `QDRANT_URL=http://localhost:6333` and `EMBED_MODEL_TYPE=local`. The cloud embedding service does not download an embedding model; Docling's tokenizer and the reranker remain local. `QDRANT_VECTOR_SIZE` must match the chosen embedding dimension: use `1024`, `768`, `512`, `256`, `128`, or `64` for DashScope `text-embedding-v3`, and `384` for the default local MiniLM model. Upload processing is synchronous: a failed request writes no successful import record and must be submitted again.
 
 The frontend Literature library panel uses these endpoints:
 

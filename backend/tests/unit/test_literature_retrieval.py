@@ -26,6 +26,8 @@ class ModelValue:
 
 class FakeDistance:
     COSINE = "cosine"
+    DOT = "dot"
+    EUCLID = "euclid"
 
 
 class FakeModels:
@@ -48,10 +50,13 @@ class FakeQdrantClient:
         self.deleted: ModelValue | None = None
         self.search_points: list[object] = []
         self.retrieved_points: list[object] = []
+        self.collection_present = False
+        self.scroll_pages: list[tuple[list[object], object | None]] = []
+        self.scroll_calls: list[dict[str, object]] = []
 
     async def collection_exists(self, collection_name: str) -> bool:
         assert collection_name == "literature_units"
-        return False
+        return self.collection_present
 
     async def create_collection(
         self,
@@ -81,6 +86,10 @@ class FakeQdrantClient:
 
     async def delete(self, **kwargs: object) -> None:
         self.deleted = kwargs["points_selector"]
+
+    async def scroll(self, **kwargs: object):
+        self.scroll_calls.append(kwargs)
+        return self.scroll_pages.pop(0)
 
 
 class FakeRerankerModel:
@@ -129,6 +138,22 @@ async def test_index_upserts_one_vector_and_complete_payload() -> None:
     assert client.created.distance == "cosine"
     assert client.upserted[0].vector == [0.1, 0.2, 0.3]
     assert client.upserted[0].payload == unit.model_dump(mode="json")
+
+
+@pytest.mark.asyncio
+async def test_index_uses_the_configured_vector_distance() -> None:
+    client = FakeQdrantClient()
+    index = QdrantLiteratureIndex(
+        client,
+        "literature_units",
+        distance="dot",
+        models_module=FakeModels,
+    )
+
+    await index.ensure_collection(3)
+
+    assert client.created is not None
+    assert client.created.distance == "dot"
 
 
 @pytest.mark.asyncio
@@ -198,6 +223,64 @@ async def test_retrieve_and_delete_use_unit_and_document_ids() -> None:
     assert retrieved == [unit]
     assert client.deleted is not None
     assert client.deleted.filter.must[0].key == "document_id"
+
+
+@pytest.mark.asyncio
+async def test_list_documents_groups_units_from_all_scroll_pages() -> None:
+    client = FakeQdrantClient()
+    client.collection_present = True
+    first = make_unit()
+    second = make_unit(
+        "33333333-3333-4333-8333-333333333333",
+        text="Second unit",
+    )
+    other = make_unit(
+        "44444444-4444-4444-8444-444444444444",
+        text="Other document",
+    ).model_copy(
+        update={
+            "document_id": UUID("55555555-5555-4555-8555-555555555555"),
+            "title": "Another paper",
+        }
+    )
+    client.scroll_pages = [
+        ([SimpleNamespace(payload=first.to_payload())], "next"),
+        (
+            [
+                SimpleNamespace(payload=second.to_payload()),
+                SimpleNamespace(payload=other.to_payload()),
+            ],
+            None,
+        ),
+    ]
+    index = QdrantLiteratureIndex(
+        client,
+        "literature_units",
+        models_module=FakeModels,
+    )
+
+    documents = await index.list_documents()
+
+    assert [(item.title, item.units_indexed) for item in documents] == [
+        ("Another paper", 1),
+        ("RAG paper", 2),
+    ]
+    assert client.scroll_calls[0]["offset"] is None
+    assert client.scroll_calls[1]["offset"] == "next"
+    assert all(call["with_vectors"] is False for call in client.scroll_calls)
+
+
+@pytest.mark.asyncio
+async def test_list_documents_returns_empty_when_collection_does_not_exist() -> None:
+    client = FakeQdrantClient()
+    index = QdrantLiteratureIndex(
+        client,
+        "literature_units",
+        models_module=FakeModels,
+    )
+
+    assert await index.list_documents() == []
+    assert client.scroll_calls == []
 
 
 @pytest.mark.asyncio

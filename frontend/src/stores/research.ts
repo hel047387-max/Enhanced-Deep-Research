@@ -9,7 +9,7 @@ import type {
 } from "../types/research";
 
 export interface ResearchApiClient {
-  startResearch(query: string, onEvent: ResearchEventHandler, signal: AbortSignal): Promise<void>;
+  startResearch(query: string, onEvent: ResearchEventHandler, signal: AbortSignal, useMemory?: boolean, useLiterature?: boolean): Promise<void>;
   resumeResearch(threadId: string, answer: string, onEvent: ResearchEventHandler, signal: AbortSignal): Promise<void>;
   cancelResearch(threadId: string): Promise<void>;
   getSnapshot(threadId: string): Promise<ResearchSnapshot>;
@@ -17,7 +17,7 @@ export interface ResearchApiClient {
 
 export interface ResearchStore {
   state: Readonly<Ref<ResearchUIState>>;
-  start(query: string): Promise<void>;
+  start(query: string, useMemory?: boolean, useLiterature?: boolean): Promise<void>;
   resume(answer: string): Promise<void>;
   cancel(): Promise<void>;
   restore(threadId: string): Promise<void>;
@@ -29,7 +29,8 @@ export function initialResearchState(): ResearchUIState {
   return {
     threadId: null, runId: null, status: "created", clarification: null,
     researchBrief: null, tasks: {}, sources: {}, evidence: {}, review: null,
-    report: "", progressEvents: [], error: null, lastSequence: 0,
+    report: "", memoryStatus: null, memoryReferences: [], memoryWarning: null,
+    progressEvents: [], error: null, lastSequence: 0,
   };
 }
 
@@ -43,9 +44,18 @@ function taskFromWire(task: ResearchTaskWire): ResearchTaskView {
 }
 
 function sourceFromWire(source: SourceWire): SourceView {
+  if (source.source_kind === "literature") {
+    return {
+      sourceId: source.source_id, sourceKind: "literature", url: null,
+      title: source.title, domain: null, publishedAt: null, sourceType: "literature",
+      authors: [...source.authors], headingPath: [...source.heading_path],
+      pageStart: source.page_start, pageEnd: source.page_end,
+    };
+  }
   return {
-    sourceId: source.source_id, url: source.url, title: source.title,
-    domain: source.domain, publishedAt: source.published_at, sourceType: source.source_type,
+    sourceId: source.source_id, sourceKind: "web", url: source.url,
+    title: source.title, domain: source.domain, publishedAt: source.published_at,
+    sourceType: source.source_type,
   };
 }
 
@@ -93,7 +103,9 @@ export function stateFromSnapshot(snapshot: ResearchSnapshot): ResearchUIState {
     tasks: dictionary(snapshot.tasks, taskFromWire), sources: dictionary(snapshot.sources, sourceFromWire),
     evidence: dictionary(snapshot.evidence, evidenceFromWire),
     review: snapshot.review ? reviewFromWire(snapshot.review) : null,
-    report: snapshot.report ?? "", progressEvents: [],
+    report: snapshot.report ?? "", memoryStatus: snapshot.memory_status ?? null,
+    memoryReferences: snapshot.memory_references ?? [],
+    memoryWarning: snapshot.memory_warning ?? null, progressEvents: [],
     error: snapshot.errors.at(-1)?.message ?? null, lastSequence: 0,
   };
 }
@@ -143,6 +155,13 @@ export function applyResearchEvent(current: ResearchUIState, event: ResearchEven
       return { ...state, status: "waiting_for_user", clarification: event.payload.question };
     case "research_brief_created":
       return { ...state, researchBrief: briefFromWire(event.payload.brief) };
+    case "memory_recalled":
+      return { ...state, memoryReferences: event.payload.researches,
+        memoryWarning: event.payload.warning ?? null };
+    case "memory_saved":
+      return { ...state, memoryStatus: "saved" };
+    case "memory_save_failed":
+      return { ...state, memoryStatus: "failed" };
     case "coverage_assessed":
     case "draft_created":
       return state;
@@ -234,10 +253,10 @@ export function useResearchStore(api: ResearchApiClient = defaultApi): ResearchS
     }
   }
 
-  async function start(query: string): Promise<void> {
+  async function start(query: string, useMemory = true, useLiterature = false): Promise<void> {
     if (controller !== null) return;
     mutableState.value = { ...initialResearchState(), status: "running" };
-    await runStream((signal) => api.startResearch(query, receive, signal));
+    await runStream((signal) => api.startResearch(query, receive, signal, useMemory, useLiterature));
   }
 
   async function resume(answer: string): Promise<void> {
@@ -267,7 +286,7 @@ export function useResearchStore(api: ResearchApiClient = defaultApi): ResearchS
 }
 
 type TestActionOverrides = {
-  start?: (query: string) => unknown;
+  start?: (query: string, useMemory?: boolean, useLiterature?: boolean) => unknown;
   resume?: (answer: string) => unknown;
   cancel?: () => unknown;
   restore?: (threadId: string) => unknown;
@@ -280,7 +299,7 @@ export function createResearchStoreForTest(
   const state = shallowRef<ResearchUIState>({ ...initialResearchState(), ...stateOverrides });
   return {
     state: computed(() => state.value),
-    start: async (query) => { await actions.start?.(query); },
+    start: async (query, useMemory, useLiterature) => { await actions.start?.(query, useMemory, useLiterature); },
     resume: async (answer) => { await actions.resume?.(answer); },
     cancel: async () => { await actions.cancel?.(); },
     restore: async (threadId) => { await actions.restore?.(threadId); },

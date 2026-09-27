@@ -35,8 +35,10 @@ class DoclingParser:
         max_tokens: int,
     ) -> DoclingParser:
         try:
+            from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
             from docling.chunking import HybridChunker
-            from docling.document_converter import DocumentConverter
+            from docling.datamodel.base_models import InputFormat
+            from docling.document_converter import DocumentConverter, PdfFormatOption
             from docling_core.transforms.chunker.tokenizer.huggingface import (
                 HuggingFaceTokenizer,
             )
@@ -51,7 +53,13 @@ class DoclingParser:
             max_tokens=max_tokens,
         )
         return cls(
-            converter=DocumentConverter(),
+            converter=DocumentConverter(
+                format_options={
+                    InputFormat.PDF: PdfFormatOption(
+                        backend=PyPdfiumDocumentBackend,
+                    )
+                }
+            ),
             chunker=HybridChunker(tokenizer=tokenizer, merge_peers=True),
         )
 

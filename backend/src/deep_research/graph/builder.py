@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 
 from langchain_core.messages import HumanMessage
@@ -6,6 +7,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Send, interrupt
 
+from deep_research.application.research_adapter import ResearchAdapter
 from deep_research.config import ResearchBudgets
 from deep_research.domain.errors import ResearchError
 from deep_research.graph.routing import may_research_again, route_review
@@ -31,10 +33,13 @@ from deep_research.nodes.supervisor import (
     research_task_node,
 )
 from deep_research.nodes.writer import write_report
+from deep_research.persistence.memory_store import MemoryStore
 from deep_research.runtime import CancellationChecker, EventSink
 from deep_research.services.citations import validate_draft
 from deep_research.state.models import ResearchState
 from deep_research.tools.search import SearchProvider
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -50,6 +55,8 @@ class WorkflowDependencies:
     budgets: ResearchBudgets
     event_sink: EventSink
     cancellation_checker: CancellationChecker
+    memory_store: MemoryStore | None = None
+    literature_adapter: ResearchAdapter | None = None
 
 
 def build_researcher_graph(
@@ -59,6 +66,7 @@ def build_researcher_graph(
     budgets: ResearchBudgets,
     event_sink: EventSink,
     cancellation_checker: CancellationChecker,
+    literature_adapter: ResearchAdapter | None = None,
 ):
     """构建单个 Researcher 的查询、搜索、缺口分析和完成子图。"""
     builder = StateGraph(
@@ -75,6 +83,7 @@ def build_researcher_graph(
             budgets,
             event_sink,
             cancellation_checker,
+            literature_adapter,
         ),
     )
     builder.add_node(
@@ -88,9 +97,9 @@ def build_researcher_graph(
         return "complete" if not state.get("queries") else "search"
 
     builder.add_conditional_edges(
-        "prepare_queries",
-        after_prepare,
-        {"search": "research_round", "complete": "complete_task"},
+        "prepare_queries",#出发节点
+        after_prepare,#路由函数
+        {"search": "research_round", "complete": "complete_task"},#映射表
     )
     builder.add_conditional_edges(
         "research_round",
@@ -147,6 +156,7 @@ def build_supervisor_graph(
                         "research_brief": state["research_brief"],
                         "total_queries": reservation["total_queries"],
                         "query_budget": reservation["query_budget"],
+                        "use_literature": state.get("use_literature", False),
                     },
                 )
                 for reservation in state["dispatch_batch"]
@@ -175,24 +185,25 @@ def build_research_graph_builder(
         budgets=deps.budgets,
         event_sink=deps.event_sink,
         cancellation_checker=deps.cancellation_checker,
+        literature_adapter=deps.literature_adapter,
     )
     supervisor = build_supervisor_graph(
         researcher_runner=researcher.ainvoke,
         coverage_model=deps.gap_model,
         budgets=deps.budgets,
     )
-    builder = StateGraph(ResearchState)
-
+    builder = StateGraph(ResearchState)#创建顶层状态图
+#判读是否要澄清
     async def clarify_node(state: ResearchState) -> dict[str, object]:
-        deps.cancellation_checker.raise_if_cancelled()
-        patch = await clarify_request(state, deps.clarifier_model)
+        deps.cancellation_checker.raise_if_cancelled()#判断是否取消
+        patch = await clarify_request(state, deps.clarifier_model)#第一个是上下文，第二个是模型
         if patch.get("interrupt_question"):
-            await deps.event_sink.emit(
-                "clarification_required",
-                {"question": patch["interrupt_question"]},
+            await deps.event_sink.emit(#给前端发送事件
+                "clarification_required",#事件类型
+                {"question": patch["interrupt_question"]},#事件内容
             )
         return patch
-
+#暂停等待用户回答
     async def ask_clarification_node(state: ResearchState) -> dict[str, object]:
         answer = interrupt({"question": state["interrupt_question"]})
         return {
@@ -204,11 +215,40 @@ def build_research_graph_builder(
     async def brief_node(state: ResearchState) -> dict[str, object]:
         deps.cancellation_checker.raise_if_cancelled()
         patch = await write_research_brief(state, deps.clarifier_model)
+        if state.get("use_literature", False) and deps.literature_adapter is None:
+            error = ResearchError(
+                error_code="literature_unavailable",
+                stage="research",
+                message="Indexed literature is unavailable; web research will continue.",
+                retryable=False,
+            )
+            patch["errors"] = [error]
+            await deps.event_sink.emit("error", error.model_dump(mode="json"))
         await deps.event_sink.emit(
             "research_brief_created",
             {"brief": patch["research_brief"].model_dump(mode="json")},
         )
         return patch
+
+    async def recall_node(state: ResearchState) -> dict[str, object]:
+        if not state.get("use_memory", True) or deps.memory_store is None:
+            return {"memory_context": {}, "memory_references": []}
+        try:
+            found = await deps.memory_store.recall(state["research_brief"])
+        except Exception:
+            logger.exception("Research memory recall failed")
+            warning = "Historical research was unavailable; this run continued without it."
+            await deps.event_sink.emit(
+                "memory_recalled", {"researches": [], "warning": warning}
+            )
+            return {
+                "memory_context": {},
+                "memory_references": [],
+                "memory_warning": warning,
+            }
+        references = found["researches"]
+        await deps.event_sink.emit("memory_recalled", {"researches": references})
+        return {"memory_context": found, "memory_references": references}
 
     async def planner_node(state: ResearchState) -> dict[str, object]:
         deps.cancellation_checker.raise_if_cancelled()
@@ -238,6 +278,7 @@ def build_research_graph_builder(
                 "coverage_checked": state.get("coverage_checked", False),
                 "supervisor_added_tasks": state.get("supervisor_added_tasks", 0),
                 "errors": state.get("errors", []),
+                "use_literature": state.get("use_literature", False),
             }
         )
         await deps.event_sink.emit(
@@ -382,6 +423,7 @@ def build_research_graph_builder(
                 "research_brief": state["research_brief"],
                 "total_queries": state.get("total_queries", 0),
                 "query_budget": grant,
+                "use_literature": state.get("use_literature", False),
             }
         )
         gap = output["gap_assessment"]
@@ -412,6 +454,7 @@ def build_research_graph_builder(
     builder.add_node("clarify", clarify_node)
     builder.add_node("ask_clarification", ask_clarification_node)
     builder.add_node("brief", brief_node)
+    builder.add_node("recall", recall_node)
     builder.add_node("planner", planner_node)
     builder.add_node("supervisor", supervisor_node)
     builder.add_node("no_evidence", no_evidence_node)
@@ -430,7 +473,8 @@ def build_research_graph_builder(
         {"ask": "ask_clarification", "brief": "brief"},
     )
     builder.add_edge("ask_clarification", "brief")
-    builder.add_edge("brief", "planner")
+    builder.add_edge("brief", "recall")
+    builder.add_edge("recall", "planner")
     builder.add_edge("planner", "supervisor")
     builder.add_conditional_edges(
         "supervisor",
@@ -473,7 +517,7 @@ def build_research_graph_builder(
     builder.add_edge("finalizer", END)
     return builder
 
-
+#所有依赖打包成一个可执行的研究工作流，可选支持断点恢复。
 def build_research_graph(
     deps: WorkflowDependencies,
     checkpointer: BaseCheckpointSaver | None = None,

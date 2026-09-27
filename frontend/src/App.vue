@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { onMounted, watch } from "vue";
 import EvidencePanel from "./components/EvidencePanel.vue";
+import LiteraturePanel from "./components/LiteraturePanel.vue";
 import ReportViewer from "./components/ReportViewer.vue";
 import ResearchForm from "./components/ResearchForm.vue";
+import ResearchHistory from "./components/ResearchHistory.vue";
 import ResearchPlan from "./components/ResearchPlan.vue";
+import ResearchProgress from "./components/ResearchProgress.vue";
 import ReviewPanel from "./components/ReviewPanel.vue";
 import TaskProgress from "./components/TaskProgress.vue";
 import { useResearchStore, type ResearchStore } from "./stores/research";
@@ -43,6 +46,9 @@ watch(() => state.value.threadId, (threadId) => {
     <main>
       <p class="sr-only" aria-live="polite">Research status: {{ state.status.replace('_', ' ') }}</p>
       <p v-if="state.error" class="global-error" role="alert">{{ state.error }}</p>
+      <p v-if="state.memoryStatus === 'failed'" class="global-error" role="alert">Memory save failed. The report is still available.</p>
+      <p v-if="state.memoryWarning" class="global-error" role="alert">{{ state.memoryWarning }}</p>
+      <ResearchProgress :state="state" />
       <ResearchForm
         :status="state.status"
         :clarification="state.clarification"
@@ -50,9 +56,11 @@ watch(() => state.value.threadId, (threadId) => {
         @resume="store.resume"
         @cancel="store.cancel"
       />
+      <ResearchHistory :refresh-key="state.memoryStatus === 'saved' ? state.threadId : null" />
+      <LiteraturePanel />
       <div class="workspace-grid">
         <div class="workspace-main">
-          <ResearchPlan :brief="state.researchBrief" :tasks="state.tasks" />
+          <ResearchPlan :brief="state.researchBrief" :tasks="state.tasks" :memory-references="state.memoryReferences" />
           <TaskProgress :tasks="state.tasks" />
           <ReportViewer :markdown="state.report" />
         </div>

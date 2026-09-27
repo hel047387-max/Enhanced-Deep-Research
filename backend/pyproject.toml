@@ -19,6 +19,7 @@ dependencies = [
 
 [project.optional-dependencies]
 rag = [
+    "dashscope>=1.23",
     "docling>=2.0",
     "python-multipart>=0.0.12",
     "qdrant-client>=1.12",
