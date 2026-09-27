@@ -1,0 +1,43 @@
+services:
+  api:
+    build:
+      context: ./backend
+    env_file:
+      - path: ./backend/.env
+        required: false
+    environment:
+      CHECKPOINT_DB_PATH: /app/data/checkpoints.sqlite
+      HF_HOME: /models/huggingface
+      HF_HUB_CACHE: /models/huggingface/hub
+      TRANSFORMERS_CACHE: /models/huggingface/transformers
+      DOCLING_ARTIFACTS_PATH: /models/docling
+    volumes:
+      - research_data:/app/data
+      - model_cache:/models
+    expose:
+      - "8000"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./frontend
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+
+volumes:
+  research_data:
+  model_cache:
+  caddy_data:
+  caddy_config:

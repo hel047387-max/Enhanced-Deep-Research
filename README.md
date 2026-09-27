@@ -215,11 +215,19 @@ npm ci --cache ..\.npm-cache
 npm run dev
 ```
 
+On the first browser visit, create the single owner account; later visits require that username and password.
+
 The frontend calls `/api/v1/research` on its own origin. The Vite development server proxies `/api` to `http://127.0.0.1:8000`, so the two commands above connect directly during local development. The frontend build and tests do not require providers.
 
 ## Configuration
 
 `.env.example` lists provider settings, the SQLite path, an explicit CORS allowlist, and every server-owned budget. The default hard cap is `MAX_TOTAL_SEARCH_QUERIES=20`; clients cannot raise it in a request. Never commit `.env` or provider credentials.
+
+## Authentication and production deployment
+
+After the backend health check succeeds, the frontend opens one of three screens: first-owner setup, login, or the authenticated research workspace. The first successful registration closes registration. Sessions use an HttpOnly Cookie; unsafe requests also carry an in-memory CSRF token. Use `python -m deep_research.auth reset-password` from the backend environment to replace the owner password and revoke existing sessions.
+
+For a public HTTPS link and desktop-installable PWA, follow [docs/deployment.md](docs/deployment.md). The production Compose stack exposes only Caddy on ports 80/443, keeps the single FastAPI worker private, and persists SQLite and model caches in named volumes.
 
 ## Verification
 
@@ -263,7 +271,7 @@ No screenshots are checked in because fabricated or stale images would be mislea
 - Live providers determine real-world latency and retrieval quality; fake evaluation measures reproducible contracts, not provider quality.
 - Supervisor/Reviewer adaptive task IDs and parent links still need collision and ancestry hardening before accepting less constrained model outputs.
 - Provider-wide retry/timeout wiring and a strict raw-content character cap remain future hardening; the existing helpers are not yet applied across every live boundary.
-- User accounts, authorization, multi-tenancy, cloud deployment, and automatic publishing are not implemented.
+- The current account model supports one owner only; multi-tenancy, external identity providers, and automatic publishing are not implemented.
 
 ## What I redesigned
 
