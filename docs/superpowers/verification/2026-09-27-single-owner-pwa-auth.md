@@ -4,7 +4,7 @@ Date: 2026-09-27
 
 Branch: `feature/single-owner-pwa-auth`
 
-Verified implementation commit before this record: `6ff1970b3f995a0c6459b64e83933f56b352c9ca`
+Verified implementation commit before this record: `ba225d8`
 
 Base commit: `4463a4a24492f2ca3222b1e66cd7c3b50319ea14`
 
@@ -27,7 +27,7 @@ D:\科研助手\enhanced-deep-research\backend\.venv\Scripts\python.exe -m pytes
 Results:
 
 - Ruff: `All checks passed!`
-- Pytest: `297 passed in 81.18s`
+- Pytest: `303 passed in 53.43s`
 
 The test run prints the existing Windows native import warning `0xc0000139` while Docling imports `semchunk -> mpire -> win32api`. The dependency catches it, all tests complete, and pytest exits successfully. The same warning was present before this feature branch.
 
@@ -47,6 +47,17 @@ Results:
 - Workbox precache contains 13 unique static entries and no API response cache rule.
 - Output includes the offline page plus 192, 512, maskable 512, and Apple touch icons.
 - The ordinary and maskable 512 icons have distinct SHA-256 hashes.
+
+## Review remediation
+
+Final code review findings were reproduced with regression tests and fixed:
+
+- PWA navigation now uses `NetworkOnly` and falls back to the precached offline page only after a failed page navigation. `/api`, `/api/**`, and `/health` are excluded. The generated worker has no default `NavigationRoute`.
+- Login tracking is bounded with LRU eviction, retains exact per-identity expiry, and adds an independent IP-wide attempt limit without globally rejecting new identities.
+- Closed registration is checked before password hashing, while the SQLite uniqueness constraint still protects the first-owner race.
+- Unknown users run a dummy Argon2 verification for valid-length passwords.
+- Registration and login parse credential types explicitly, never echo rejected password values, map blank usernames to stable client errors, and reject out-of-policy login passwords before Argon2 verification.
+- An independent final review approved the corrected implementation with no remaining concrete defects.
 
 ## Deployment asset checks
 
@@ -85,7 +96,7 @@ git grep -En 'sk-[A-Za-z0-9_-]{20,}|(LLM|TAVILY|QDRANT|EMBED)_API_KEY=[^[:space:
 
 Results:
 
-- Worktree was clean before this verification record was created.
+- Implementation files were clean after commit `ba225d8`; only this verification record remained to commit.
 - No files were staged.
 - No tracked runtime `.env`, SQLite/database file, data directory, Hugging Face/model cache, or provider key was found.
 - Raw session tokens are stored only in HttpOnly Cookies at runtime; persisted sessions contain SHA-256 token hashes.
