@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
-import App from "./App.vue";
+import AuthGate from "./components/AuthGate.vue";
+import type { AuthStore } from "./stores/auth";
 import { checkBackendHealth } from "./api/health";
 import ProgressBar from "./components/ProgressBar.vue";
 
 const props = withDefaults(defineProps<{
   checkHealth?: () => Promise<boolean>;
   retryDelayMs?: number;
+  authStore?: AuthStore;
 }>(), {
   checkHealth: checkBackendHealth,
   retryDelayMs: 1000,
@@ -36,7 +38,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <App v-if="ready" />
+  <AuthGate v-if="ready" :store="authStore" />
   <main v-else class="startup-shell" data-testid="backend-loading">
     <div class="startup-card">
       <p class="brand-mark">DEEP / RESEARCH</p>

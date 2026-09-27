@@ -1,4 +1,5 @@
 import { mount } from "@vue/test-utils";
+import { computed } from "vue";
 import { describe, expect, it, vi } from "vitest";
 import App from "./App.vue";
 import { createResearchStoreForTest, useResearchStore } from "./stores/research";
@@ -167,5 +168,23 @@ describe("App", () => {
     expect(report.find("script").exists()).toBe(false);
     expect(report.html()).not.toContain("onerror");
     expect(report.find("a").exists()).toBe(false);
+  });
+  it("shows a logout action for an authenticated owner", async () => {
+    const logout = vi.fn().mockResolvedValue(undefined);
+    const authStore = {
+      state: computed(() => "authenticated" as const),
+      owner: computed(() => ({ user_id: "u1", username: "owner", role: "owner" as const, csrf_token: "csrf" })),
+      check: vi.fn(),
+      register: vi.fn(),
+      login: vi.fn(),
+      logout,
+    };
+    const wrapper = mount(App, {
+      props: { store: createResearchStoreForTest(), authStore },
+    });
+
+    await wrapper.get('[data-testid="logout"]').trigger("click");
+
+    expect(logout).toHaveBeenCalledOnce();
   });
 });

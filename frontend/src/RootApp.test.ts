@@ -12,17 +12,17 @@ describe("RootApp", () => {
       .mockResolvedValueOnce(true);
     const wrapper = mount(RootApp, {
       props: { checkHealth, retryDelayMs: 10 },
-      global: { stubs: { App: { template: '<div data-testid="app-ready" />' } } },
+      global: { stubs: { AuthGate: { template: '<div data-testid="auth-gate" />' } } },
     });
 
     await flushPromises();
     expect(wrapper.get('[data-testid="backend-loading"]').text()).toContain("Waiting for backend");
-    expect(wrapper.find('[data-testid="app-ready"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="auth-gate"]').exists()).toBe(false);
 
     await vi.advanceTimersByTimeAsync(10);
     await flushPromises();
 
-    expect(wrapper.find('[data-testid="app-ready"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="auth-gate"]').exists()).toBe(true);
     expect(checkHealth).toHaveBeenCalledTimes(2);
   });
 });

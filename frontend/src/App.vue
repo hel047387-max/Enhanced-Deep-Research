@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, watch } from "vue";
+import { onMounted, ref, watch } from "vue";
 import EvidencePanel from "./components/EvidencePanel.vue";
 import LiteraturePanel from "./components/LiteraturePanel.vue";
 import ReportViewer from "./components/ReportViewer.vue";
@@ -9,11 +9,23 @@ import ResearchPlan from "./components/ResearchPlan.vue";
 import ResearchProgress from "./components/ResearchProgress.vue";
 import ReviewPanel from "./components/ReviewPanel.vue";
 import TaskProgress from "./components/TaskProgress.vue";
+import type { AuthStore } from "./stores/auth";
 import { useResearchStore, type ResearchStore } from "./stores/research";
 
-const props = defineProps<{ store?: ResearchStore; initialThreadId?: string }>();
+const props = defineProps<{ store?: ResearchStore; initialThreadId?: string; authStore?: AuthStore }>();
 const store = props.store ?? useResearchStore();
 const state = store.state;
+const loggingOut = ref(false);
+
+async function logout(): Promise<void> {
+  if (!props.authStore || loggingOut.value) return;
+  loggingOut.value = true;
+  try {
+    await props.authStore.logout();
+  } finally {
+    loggingOut.value = false;
+  }
+}
 
 onMounted(() => {
   const threadId = props.initialThreadId ?? new URLSearchParams(window.location.search).get("thread") ?? undefined;
@@ -37,9 +49,21 @@ watch(() => state.value.threadId, (threadId) => {
         <h1>Evidence, not black boxes.</h1>
         <p>Follow the research plan from first question to cited report—without exposing private reasoning.</p>
       </div>
-      <div class="run-status" :data-status="state.status">
-        <span class="status-dot" aria-hidden="true" />
-        <span>{{ state.status.replace('_', ' ') }}</span>
+      <div class="header-actions">
+        <div class="run-status" :data-status="state.status">
+          <span class="status-dot" aria-hidden="true" />
+          <span>{{ state.status.replace('_', ' ') }}</span>
+        </div>
+        <button
+          v-if="authStore"
+          class="secondary compact"
+          data-testid="logout"
+          type="button"
+          :disabled="loggingOut"
+          @click="logout"
+        >
+          {{ loggingOut ? 'Signing out…' : 'Sign out' }}
+        </button>
       </div>
     </header>
 
