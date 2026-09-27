@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Deep Research">
+  <rect width="512" height="512" rx="112" fill="#173d31"/>
+  <circle cx="214" cy="214" r="112" fill="none" stroke="#f8f3df" stroke-width="34"/>
+  <path d="M298 298 410 410" stroke="#ed7a3b" stroke-width="42" stroke-linecap="round"/>
+  <path d="M152 214h124M214 152v124" stroke="#f8f3df" stroke-width="24" stroke-linecap="round" opacity=".9"/>
+</svg>

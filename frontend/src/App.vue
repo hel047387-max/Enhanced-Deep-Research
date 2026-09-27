@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from "vue";
 import EvidencePanel from "./components/EvidencePanel.vue";
+import InstallPrompt from "./components/InstallPrompt.vue";
 import LiteraturePanel from "./components/LiteraturePanel.vue";
 import ReportViewer from "./components/ReportViewer.vue";
 import ResearchForm from "./components/ResearchForm.vue";
@@ -54,6 +55,7 @@ watch(() => state.value.threadId, (threadId) => {
           <span class="status-dot" aria-hidden="true" />
           <span>{{ state.status.replace('_', ' ') }}</span>
         </div>
+        <InstallPrompt />
         <button
           v-if="authStore"
           class="secondary compact"
