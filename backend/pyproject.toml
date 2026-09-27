@@ -5,6 +5,7 @@ description = "Portfolio deep research agent"
 requires-python = ">=3.11"
 dependencies = [
     "aiosqlite>=0.20",
+    "argon2-cffi>=23.1",
     "fastapi>=0.115",
     "idna>=3.7",
     "langgraph-checkpoint-sqlite>=2.0",

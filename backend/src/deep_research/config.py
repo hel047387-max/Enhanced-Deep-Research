@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     checkpoint_db_path: Path = Path("./data/checkpoints.sqlite")
     cors_origins: str = "http://localhost:5173"
     log_level: str = "INFO"
+    app_base_url: str = "http://localhost:5173"
+    auth_cookie_secure: bool = False
+    auth_session_days: int = Field(default=7, ge=1, le=30)
+    auth_login_attempts: int = Field(default=5, ge=1, le=100)
+    auth_login_window_seconds: int = Field(default=900, ge=1, le=86_400)
     max_initial_tasks: InitialTasks = 5
     max_supervisor_tasks: SupervisorTasks = 2
     max_reviewer_tasks: ReviewerTasks = 1
@@ -79,6 +84,16 @@ class Settings(BaseSettings):
         if self.rag_top_k > self.rag_candidate_limit:
             raise ValueError("rag_top_k cannot exceed rag_candidate_limit")
         return self
+
+    @property
+    def auth_cookie_name(self) -> str:
+        if self.auth_cookie_secure:
+            return "__Host-research_session"
+        return "research_session_dev"
+
+    @property
+    def auth_cookie_max_age(self) -> int:
+        return self.auth_session_days * 86_400
 
     @property
     def embedding_model_name(self) -> str:

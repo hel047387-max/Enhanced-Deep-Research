@@ -98,3 +98,21 @@ def test_embedding_provider_rejects_an_unknown_service() -> None:
 
 def test_rag_defaults_return_three_results() -> None:
     assert Settings(_env_file=None).rag_top_k == 3
+
+
+def test_auth_settings_use_safe_local_defaults() -> None:
+    settings = Settings(_env_file=None)
+
+    assert settings.app_base_url == "http://localhost:5173"
+    assert settings.auth_cookie_secure is False
+    assert settings.auth_cookie_name == "research_session_dev"
+    assert settings.auth_cookie_max_age == 604_800
+    assert settings.auth_session_days == 7
+    assert settings.auth_login_attempts == 5
+    assert settings.auth_login_window_seconds == 900
+
+
+def test_secure_auth_uses_the_host_prefixed_cookie() -> None:
+    settings = Settings(_env_file=None, auth_cookie_secure=True)
+
+    assert settings.auth_cookie_name == "__Host-research_session"
