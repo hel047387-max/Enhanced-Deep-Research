@@ -1,4 +1,4 @@
-import type {
+import { apiFetch } from "./http";import type {
   IngestedDocument,
   LiteratureAnswer,
   LiteratureDocument,
@@ -10,17 +10,7 @@ import type {
 const ROOT = "/api/v1/literature";
 
 async function requestJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
-  const response = await fetch(input, init);
-  if (!response.ok) {
-    let detail = `Request failed (${response.status}).`;
-    try {
-      const body = (await response.json()) as { detail?: unknown };
-      if (typeof body.detail === "string") detail = body.detail;
-    } catch {
-      // Keep the stable status message when the response is not JSON.
-    }
-    throw new Error(detail);
-  }
+  const response = await apiFetch(input, init);
   return (await response.json()) as T;
 }
 
@@ -61,9 +51,8 @@ export const literatureApi: LiteratureApiClient = {
   },
 
   async deleteDocument(documentId) {
-    const response = await fetch(`${ROOT}/documents/${encodeURIComponent(documentId)}`, {
+    await apiFetch(`${ROOT}/documents/${encodeURIComponent(documentId)}`, {
       method: "DELETE",
     });
-    if (!response.ok) throw new Error(`Document deletion failed (${response.status}).`);
   },
 };

@@ -3,10 +3,14 @@ import {
   ApiError,
   cancelResearch,
   getSnapshot,
+  getArchive,
+  listArchives,
+  searchMemory,
   parseSseStream,
   resumeResearch,
   startResearch,
 } from "./research";
+import { setCsrfToken } from "./http";
 import type { ResearchEvent, ResearchSnapshot } from "../types/research";
 
 function byteStream(chunks: Uint8Array[]): ReadableStream<Uint8Array> {
@@ -28,6 +32,7 @@ function eventJson(type: "done" | "run_started", sequence: number, payload = "{}
 }
 
 afterEach(() => {
+  setCsrfToken(null);
   vi.unstubAllGlobals();
 });
 
@@ -158,5 +163,46 @@ describe("research API", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, "/api/v1/research/thread%2F1", expect.objectContaining({ method: "GET" }));
     expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/v1/research/thread%2F1/cancel", expect.objectContaining({ method: "POST" }));
+  });
+  it("uses authenticated transport for research and memory operations", async () => {
+    const snapshot = {
+      run_id: "run-1",
+      thread_id: "thread-1",
+      status: "running",
+      clarification: null,
+      research_brief: null,
+      tasks: {},
+      sources: {},
+      evidence: {},
+      review: null,
+      report: null,
+      errors: [],
+    } satisfies ResearchSnapshot;
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(`data: ${eventJson("done", 1, '{"status":"completed"}')}\n\n`),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 202 }))
+      .mockResolvedValueOnce(Response.json(snapshot))
+      .mockResolvedValueOnce(Response.json({ items: [] }))
+      .mockResolvedValueOnce(Response.json({ thread_id: "thread-1" }))
+      .mockResolvedValueOnce(Response.json({ researches: [], cards: [] }));
+    vi.stubGlobal("fetch", fetchMock);
+    setCsrfToken("csrf");
+
+    await startResearch("question", vi.fn(), new AbortController().signal);
+    await cancelResearch("thread-1");
+    await getSnapshot("thread-1");
+    await listArchives();
+    await getArchive("thread-1");
+    await searchMemory("topic");
+
+    for (const [, rawInit] of fetchMock.mock.calls) {
+      expect((rawInit as RequestInit).credentials).toBe("same-origin");
+    }
+    expect(new Headers((fetchMock.mock.calls[0]?.[1] as RequestInit).headers).get("X-CSRF-Token")).toBe("csrf");
+    expect(new Headers((fetchMock.mock.calls[1]?.[1] as RequestInit).headers).get("X-CSRF-Token")).toBe("csrf");
+    expect(new Headers((fetchMock.mock.calls[2]?.[1] as RequestInit).headers).has("X-CSRF-Token")).toBe(false);
   });
 });

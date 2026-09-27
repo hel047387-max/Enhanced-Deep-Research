@@ -1,3 +1,5 @@
+import { ApiError, apiFetch } from "./http";
+export { ApiError } from "./http";
 import type {
   ResearchEvent,
   ResearchEventType,
@@ -36,38 +38,6 @@ const EVENT_TYPES = new Set<ResearchEventType>([
 ]);
 
 export type ResearchEventHandler = (event: ResearchEvent) => void;
-
-export class ApiError extends Error {
-  constructor(
-    public readonly status: number,
-    public readonly detail: string,
-  ) {
-    super(`Request failed (${status}): ${detail}`);
-    this.name = "ApiError";
-  }
-}
-
-function sanitizeDetail(value: unknown): string {
-  if (typeof value !== "string") return "Request failed.";
-  const clean = value
-    .replace(/<[^>]*>/g, "")
-    .replace(/[\u0000-\u001f\u007f]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 300);
-  return clean || "Request failed.";
-}
-
-async function apiError(response: Response): Promise<ApiError> {
-  let detail: unknown;
-  try {
-    const body = (await response.json()) as { detail?: unknown };
-    detail = body.detail;
-  } catch {
-    detail = undefined;
-  }
-  return new ApiError(response.status, sanitizeDetail(detail));
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -155,7 +125,7 @@ async function streamRequest(
   onEvent: ResearchEventHandler,
   signal: AbortSignal,
 ): Promise<void> {
-  const response = await fetch(`${API_ROOT}${path}`, {
+  const response = await apiFetch(`${API_ROOT}${path}`, {
     method: "POST",
     headers: {
       Accept: "text/event-stream",
@@ -164,7 +134,6 @@ async function streamRequest(
     body: JSON.stringify(body),
     signal,
   });
-  if (!response.ok) throw await apiError(response);
   if (response.body === null) throw new ApiError(502, "Research stream was unavailable.");
   await parseSseStream(response.body, onEvent, signal);
 }
@@ -189,39 +158,34 @@ export function resumeResearch(
 }
 
 export async function cancelResearch(threadId: string): Promise<void> {
-  const response = await fetch(`${API_ROOT}/${encodeURIComponent(threadId)}/cancel`, {
+  const response = await apiFetch(`${API_ROOT}/${encodeURIComponent(threadId)}/cancel`, {
     method: "POST",
     headers: { Accept: "application/json" },
   });
-  if (!response.ok) throw await apiError(response);
 }
 
 export async function getSnapshot(threadId: string): Promise<ResearchSnapshot> {
-  const response = await fetch(`${API_ROOT}/${encodeURIComponent(threadId)}`, {
+  const response = await apiFetch(`${API_ROOT}/${encodeURIComponent(threadId)}`, {
     method: "GET",
     headers: { Accept: "application/json" },
   });
-  if (!response.ok) throw await apiError(response);
   return (await response.json()) as ResearchSnapshot;
 }
 
 const MEMORY_ROOT = "/api/v1/memories";
 
 export async function listArchives(offset = 0): Promise<ArchiveSummary[]> {
-  const response = await fetch(`${MEMORY_ROOT}/researches?limit=20&offset=${offset}`);
-  if (!response.ok) throw await apiError(response);
+  const response = await apiFetch(`${MEMORY_ROOT}/researches?limit=20&offset=${offset}`);
   const body = (await response.json()) as { items: ArchiveSummary[] };
   return body.items;
 }
 
 export async function getArchive(threadId: string): Promise<ArchiveDetail> {
-  const response = await fetch(`${MEMORY_ROOT}/researches/${encodeURIComponent(threadId)}`);
-  if (!response.ok) throw await apiError(response);
+  const response = await apiFetch(`${MEMORY_ROOT}/researches/${encodeURIComponent(threadId)}`);
   return (await response.json()) as ArchiveDetail;
 }
 
 export async function searchMemory(query: string): Promise<MemorySearchResult> {
-  const response = await fetch(`${MEMORY_ROOT}/search?q=${encodeURIComponent(query)}`);
-  if (!response.ok) throw await apiError(response);
+  const response = await apiFetch(`${MEMORY_ROOT}/search?q=${encodeURIComponent(query)}`);
   return (await response.json()) as MemorySearchResult;
 }
