@@ -50,6 +50,9 @@ class AuthService:
     def hash_session_token(raw_token: str) -> str:
         return hash_session_token(raw_token)
 
+    async def registration_open(self) -> bool:
+        return await self._store.registration_open()
+
     async def register(self, username: str, password: str) -> IssuedSession:
         normalized_username = self._validate_username(username)
         validate_password(password)

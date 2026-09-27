@@ -4,9 +4,10 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from deep_research.api.auth_routes import router as auth_router
 from deep_research.api.literature_routes import (
     LiteratureApplication,
 )
@@ -14,6 +15,10 @@ from deep_research.api.literature_routes import (
     router as literature_router,
 )
 from deep_research.api.routes import health_router, memory_router, router
+from deep_research.auth.dependencies import require_owner
+from deep_research.auth.passwords import Argon2PasswordHasher
+from deep_research.auth.rate_limit import LoginRateLimiter
+from deep_research.auth.service import AuthService
 from deep_research.config import Settings, get_settings
 from deep_research.domain.plan import (
     CoverageDecision,
@@ -26,6 +31,7 @@ from deep_research.graph.builder import WorkflowDependencies, build_research_gra
 from deep_research.llm import create_structured_model
 from deep_research.nodes.clarify import ClarificationDecision
 from deep_research.nodes.researcher import EvidenceExtraction
+from deep_research.persistence.auth_store import AuthStore
 from deep_research.persistence.checkpoint import checkpoint_context
 from deep_research.persistence.memory_store import MemoryStore
 from deep_research.persistence.run_store import RunStore
@@ -41,6 +47,7 @@ from deep_research.tools.search import TavilySearchProvider
 
 class _PromptRouter:
     """根据提示词标记把模型调用路由到匹配的固定响应。"""
+
     def __init__(self, marker: str, matched: Any, fallback: Any) -> None:
         self._marker = marker
         self._matched = matched
@@ -145,9 +152,7 @@ def _production_literature_application(
         settings.rag_chunk_tokenizer_model,
         max_tokens=settings.rag_chunk_max_tokens,
     )
-    reranker = SentenceTransformerReranker.from_model_name(
-        settings.rag_reranker_model
-    )
+    reranker = SentenceTransformerReranker.from_model_name(settings.rag_reranker_model)
     router = QueryRouter(create_structured_model(settings, QueryDecision))
     enhancer = QueryEnhancer(
         create_structured_model(settings, ExpandedQueries),
@@ -179,13 +184,16 @@ def _production_literature_application(
         client,
     )
 
+
 def _origins(settings: Settings, override: list[str] | None) -> list[str]:
     """解析 CORS 允许的来源列表。"""
     origins = override or [
         origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()
     ]
     if "*" in origins:
-        raise ValueError("CORS origins must be an explicit allowlist; '*' is not allowed.")
+        raise ValueError(
+            "CORS origins must be an explicit allowlist; '*' is not allowed."
+        )
     return origins
 
 
@@ -195,12 +203,27 @@ def create_app(
     cors_origins: list[str] | None = None,
     settings: Settings | None = None,
     literature_application: LiteratureApplication | None = None,
+    auth_service: AuthService | None = None,
 ) -> FastAPI:
     resolved_settings = settings or get_settings()
 
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         owned_literature_client = None
+        if auth_service is not None:
+            application.state.auth_service = auth_service
+        else:
+            auth_store = AuthStore(resolved_settings.checkpoint_db_path)
+            await auth_store.initialize()
+            application.state.auth_service = AuthService(
+                auth_store,
+                Argon2PasswordHasher(),
+                LoginRateLimiter(
+                    max_attempts=resolved_settings.auth_login_attempts,
+                    window_seconds=resolved_settings.auth_login_window_seconds,
+                ),
+                session_days=resolved_settings.auth_session_days,
+            )
         if literature_application is not None:
             application.state.literature_application = literature_application
         elif resolved_settings.rag_enabled:
@@ -216,14 +239,16 @@ def create_app(
                 if owned_literature_client is not None:
                     await owned_literature_client.close()
             return
-#生成器函数的 return，不能带返回值（或者返回值会被直接忽略），return 的唯一作用就是：终止这个生成器，结束函数。
+        # 生成器函数的 return，不能带返回值（或者返回值会被直接忽略），return 的唯一作用就是：终止这个生成器，结束函数。
         store = RunStore(resolved_settings.checkpoint_db_path)
         await store.initialize()
         memory_store = MemoryStore(resolved_settings.checkpoint_db_path)
         await memory_store.initialize()
         publisher = EventPublisher()
         cancellation = CancellationRegistry()
-        async with checkpoint_context(resolved_settings.checkpoint_db_path) as checkpointer:
+        async with checkpoint_context(
+            resolved_settings.checkpoint_db_path
+        ) as checkpointer:
             graph = build_research_graph(
                 _production_dependencies(
                     resolved_settings,
@@ -266,13 +291,18 @@ def create_app(
         allow_origins=_origins(resolved_settings, cors_origins),
         allow_credentials=True,
         allow_methods=["GET", "POST", "DELETE"],
-        allow_headers=["Content-Type"],
+        allow_headers=["Content-Type", "X-CSRF-Token"],
     )
-    application.include_router(router)
-    application.include_router(literature_router)
-    application.include_router(memory_router)
+    protected = [Depends(require_owner)]
+    application.include_router(auth_router)
+    application.include_router(router, dependencies=protected)
+    application.include_router(literature_router, dependencies=protected)
+    application.include_router(memory_router, dependencies=protected)
     application.include_router(health_router)
+    application.state.settings = resolved_settings
     application.state.rag_max_upload_bytes = resolved_settings.rag_max_upload_bytes
+    if auth_service is not None:
+        application.state.auth_service = auth_service
     if runtime is not None:
         application.state.runtime = runtime
     if literature_application is not None:

@@ -7,6 +7,9 @@ from httpx import ASGITransport, AsyncClient
 
 from deep_research.api.literature_routes import LiteratureApplication
 from deep_research.api.main import create_app
+from deep_research.auth.passwords import Argon2PasswordHasher
+from deep_research.auth.rate_limit import LoginRateLimiter
+from deep_research.auth.service import AuthService
 from deep_research.config import Settings
 from deep_research.domain.literature import (
     IngestedDocument,
@@ -17,6 +20,7 @@ from deep_research.domain.literature import (
     RetrievedUnit,
     SearchableUnit,
 )
+from deep_research.persistence.auth_store import AuthStore
 
 
 class FakeProcessor:
@@ -82,6 +86,7 @@ class FakeRetriever:
         self.requests.append(request)
         return [RetrievedUnit(unit=self.unit, similarity_score=0.8, rerank_score=0.9)]
 
+
 class FakeAnswerService:
     async def answer(self, request):
         return LiteratureAnswer(
@@ -99,21 +104,40 @@ class FakeAnswerService:
             ],
         )
 
+
 @pytest.fixture
-async def literature_client(runtime_harness):
+async def literature_client(runtime_harness, tmp_path):
     processor = FakeProcessor()
     retriever = FakeRetriever()
-    literature = LiteratureApplication(processor=processor, retriever=retriever, answer_service=FakeAnswerService())
+    literature = LiteratureApplication(
+        processor=processor,
+        retriever=retriever,
+        answer_service=FakeAnswerService(),
+    )
+    auth_store = AuthStore(tmp_path / "literature-auth.sqlite")
+    await auth_store.initialize()
+    auth_service = AuthService(
+        auth_store,
+        Argon2PasswordHasher(),
+        LoginRateLimiter(max_attempts=5, window_seconds=900),
+    )
     app = create_app(
         runtime_harness.runtime,
         literature_application=literature,
         settings=Settings(rag_max_upload_bytes=100),
         cors_origins=["https://allowed.example"],
+        auth_service=auth_service,
     )
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
     ) as client:
+        registration = await client.post(
+            "/api/v1/auth/register",
+            json={"username": "owner", "password": "correct password"},
+        )
+        assert registration.status_code == 201
+        client.headers["X-CSRF-Token"] = registration.json()["csrf_token"]
         yield client, processor, retriever
 
 
@@ -230,6 +254,7 @@ async def test_disabled_literature_returns_503(async_client) -> None:
 
     assert response.status_code == 503
 
+
 @pytest.mark.asyncio
 async def test_answer_returns_grounded_citations(literature_client) -> None:
     client, _, _ = literature_client
@@ -243,6 +268,7 @@ async def test_answer_returns_grounded_citations(literature_client) -> None:
     assert response.json()["answer"] == "Grounded answer."
     assert response.json()["citations"][0]["page_start"] == 2
 
+
 @pytest.mark.asyncio
 async def test_research_request_reports_unavailable_literature(async_client) -> None:
     async with async_client.stream(
@@ -251,13 +277,12 @@ async def test_research_request_reports_unavailable_literature(async_client) -> 
         json={"query": "A complete scoped question", "use_literature": True},
     ) as response:
         events = [
-            line
-            async for line in response.aiter_lines()
-            if line.startswith("data: ")
+            line async for line in response.aiter_lines() if line.startswith("data: ")
         ]
 
     assert response.status_code == 200
     assert any("literature_unavailable" in event for event in events)
+
 
 @pytest.mark.asyncio
 async def test_search_rejects_reversed_year_range(literature_client) -> None:

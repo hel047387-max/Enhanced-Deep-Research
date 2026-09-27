@@ -2,8 +2,9 @@ import json
 
 import pytest
 
+from deep_research.api.auth_routes import router as auth_router
 from deep_research.api.literature_routes import router as literature_router
-from deep_research.api.routes import health_router, router
+from deep_research.api.routes import health_router, memory_router, router
 
 
 @pytest.mark.asyncio
@@ -63,7 +64,9 @@ async def test_snapshot_and_report_use_the_same_runtime(async_client) -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("field", ["query", "answer"])
-async def test_stream_requests_reject_empty_and_oversized_text(async_client, field) -> None:
+async def test_stream_requests_reject_empty_and_oversized_text(
+    async_client, field
+) -> None:
     path = (
         "/api/v1/research/stream"
         if field == "query"
@@ -101,11 +104,25 @@ async def test_cors_uses_the_explicit_allowlist(async_client) -> None:
 def test_application_exposes_only_the_approved_endpoints() -> None:
     routes = {
         (method, route.path)
-        for route in [*router.routes, *literature_router.routes, *health_router.routes]
+        for route in [
+            *auth_router.routes,
+            *router.routes,
+            *literature_router.routes,
+            *memory_router.routes,
+            *health_router.routes,
+        ]
         for method in getattr(route, "methods", set())
     }
 
     assert routes == {
+        ("GET", "/api/v1/auth/status"),
+        ("POST", "/api/v1/auth/register"),
+        ("POST", "/api/v1/auth/login"),
+        ("GET", "/api/v1/auth/me"),
+        ("POST", "/api/v1/auth/logout"),
+        ("GET", "/api/v1/memories/researches"),
+        ("GET", "/api/v1/memories/search"),
+        ("GET", "/api/v1/memories/researches/{thread_id}"),
         ("POST", "/api/v1/research/stream"),
         ("POST", "/api/v1/research/{thread_id}/resume/stream"),
         ("GET", "/api/v1/research/{thread_id}"),

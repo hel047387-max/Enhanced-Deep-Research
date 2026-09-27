@@ -2,6 +2,7 @@ import asyncio
 from collections.abc import Callable
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,8 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from pydantic import BaseModel
 
 from deep_research.api.main import create_app
+from deep_research.auth.dependencies import require_owner
+from deep_research.auth.models import AuthContext, SessionRecord, UserRecord
 from deep_research.config import ResearchBudgets
 from deep_research.domain.plan import (
     CoverageLevel,
@@ -51,7 +54,9 @@ class RuntimeClarifierModel:
             return {
                 "needs_clarification": ambiguous,
                 "question": "Which market and time range?" if ambiguous else None,
-                "reason": "Essential scope is missing" if ambiguous else "Scope is clear",
+                "reason": "Essential scope is missing"
+                if ambiguous
+                else "Scope is clear",
             }
         return ResearchBrief(
             main_question="What does the evidence show?",
@@ -226,10 +231,30 @@ async def runtime_with_failing_checkpointer(tmp_path: Path):
 
 @pytest.fixture
 def api_app(runtime_harness):
-    return create_app(
+    application = create_app(
         runtime_harness.runtime,
         cors_origins=["https://allowed.example"],
     )
+    now = datetime(2026, 9, 27, tzinfo=UTC)
+    application.dependency_overrides[require_owner] = lambda: AuthContext(
+        user=UserRecord(
+            user_id="test-owner",
+            username="owner",
+            password_hash="unused",
+            role="owner",
+            created_at=now,
+            password_changed_at=now,
+        ),
+        session=SessionRecord(
+            token_hash="test-token",
+            user_id="test-owner",
+            csrf_token="test-csrf",
+            created_at=now,
+            expires_at=now,
+            last_seen_at=now,
+        ),
+    )
+    return application
 
 
 @pytest.fixture
@@ -284,7 +309,9 @@ def three_task_plan() -> ResearchPlan:
 
 
 @pytest.fixture
-def model_factory() -> Callable[[BaseModel | dict[str, object]], ScriptedStructuredModel]:
+def model_factory() -> Callable[
+    [BaseModel | dict[str, object]], ScriptedStructuredModel
+]:
     return lambda result: ScriptedStructuredModel([result])
 
 

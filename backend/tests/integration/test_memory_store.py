@@ -36,16 +36,20 @@ def sample_state():
         "research_brief": ResearchBrief(main_question="电池容量趋势", scope="2025"),
         "draft_report": ReportDraft(
             title="Battery report",
-            executive_summary=[ReportParagraph(
-                paragraph_id="summary-1",
-                text="Capacity increased.",
-                evidence_ids=["evidence-1"],
-            )],
-            sections=[ReportSection(
-                section_id="findings",
-                heading="Findings",
-                paragraphs=[],
-            )],
+            executive_summary=[
+                ReportParagraph(
+                    paragraph_id="summary-1",
+                    text="Capacity increased.",
+                    evidence_ids=["evidence-1"],
+                )
+            ],
+            sections=[
+                ReportSection(
+                    section_id="findings",
+                    heading="Findings",
+                    paragraphs=[],
+                )
+            ],
             limitations=["Only one source was available."],
             suggested_actions=[],
         ),
@@ -103,13 +107,17 @@ async def test_invalid_card_evidence_does_not_commit_archive(tmp_path):
     store = MemoryStore(tmp_path / "research.db")
     await store.initialize()
     state = sample_state()
-    state["draft_report"] = state["draft_report"].model_copy(update={
-        "executive_summary": [ReportParagraph(
-            paragraph_id="summary-1",
-            text="Unsupported.",
-            evidence_ids=["missing"],
-        )],
-    })
+    state["draft_report"] = state["draft_report"].model_copy(
+        update={
+            "executive_summary": [
+                ReportParagraph(
+                    paragraph_id="summary-1",
+                    text="Unsupported.",
+                    evidence_ids=["missing"],
+                )
+            ],
+        }
+    )
 
     with pytest.raises(ValueError, match="evidence"):
         await store.archive("thread-1", "run-1", state)
@@ -124,13 +132,17 @@ async def test_memory_api_lists_searches_and_reads_archived_report(tmp_path):
     from httpx import ASGITransport, AsyncClient
 
     from deep_research.api.main import create_app
+    from deep_research.auth.dependencies import require_owner
 
     store = MemoryStore(tmp_path / "research.db")
     await store.initialize()
     await store.archive("thread-1", "run-1", sample_state())
     app = create_app(SimpleNamespace(memory_store=store))
+    app.dependency_overrides[require_owner] = lambda: None
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
         listing = await client.get("/api/v1/memories/researches")
         search = await client.get("/api/v1/memories/search", params={"q": "电池"})
         detail = await client.get("/api/v1/memories/researches/thread-1")
