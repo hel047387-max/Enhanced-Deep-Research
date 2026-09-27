@@ -82,6 +82,33 @@ async def test_status_registration_session_and_duplicate_registration(
 
 
 @pytest.mark.asyncio
+async def test_registration_validation_is_safe_and_maps_blank_username(auth_client) -> None:
+    client, _ = auth_client
+    secret = "sensitive-" + ("x" * 140)
+
+    oversized = await client.post(
+        "/api/v1/auth/register",
+        json={"username": "owner", "password": secret},
+    )
+    blank = await client.post(
+        "/api/v1/auth/register",
+        json={"username": "   ", "password": "correct password"},
+    )
+
+    wrong_type_secret = "wrong-type-secret"
+    wrong_type = await client.post(
+        "/api/v1/auth/register",
+        json={"username": "owner", "password": [wrong_type_secret]},
+    )
+
+    assert oversized.status_code == 422
+    assert secret not in oversized.text
+    assert blank.status_code == 422
+    assert wrong_type.status_code == 422
+    assert wrong_type_secret not in wrong_type.text
+
+
+@pytest.mark.asyncio
 async def test_cookie_flags_for_local_and_secure_modes(
     runtime_harness, tmp_path
 ) -> None:
@@ -149,6 +176,23 @@ async def test_login_error_is_generic_and_sixth_attempt_is_rate_limited(
     assert unknown.json() == wrong.json() == {"detail": "Invalid username or password."}
     assert limited.status_code == 429
     assert limited.headers["retry-after"] == "900"
+
+
+@pytest.mark.asyncio
+async def test_login_rejects_oversized_password_without_reflecting_it(auth_client) -> None:
+    client, _ = auth_client
+    await register(client)
+    client.cookies.clear()
+    secret = "login-secret-" + ("x" * 140)
+
+    response = await client.post(
+        "/api/v1/auth/login",
+        json={"username": "owner", "password": secret},
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Invalid username or password."}
+    assert secret not in response.text
 
 
 @pytest.mark.asyncio

@@ -11,9 +11,13 @@ from deep_research.auth.models import (
     SessionRecord,
     UserRecord,
 )
-from deep_research.auth.passwords import Argon2PasswordHasher, validate_password
+from deep_research.auth.passwords import (
+    Argon2PasswordHasher,
+    InvalidPassword,
+    validate_password,
+)
 from deep_research.auth.rate_limit import LoginRateLimiter
-from deep_research.persistence.auth_store import AuthStore
+from deep_research.persistence.auth_store import AuthStore, RegistrationClosed
 
 
 class InvalidCredentials(ValueError):
@@ -45,6 +49,7 @@ class AuthService:
         self._session_days = session_days
         self._now = now or (lambda: datetime.now(UTC))
         self._token_factory = token_factory or (lambda: secrets.token_urlsafe(32))
+        self._dummy_password_hash = password_hasher.hash(secrets.token_urlsafe(32))
 
     @staticmethod
     def hash_session_token(raw_token: str) -> str:
@@ -54,6 +59,8 @@ class AuthService:
         return await self._store.registration_open()
 
     async def register(self, username: str, password: str) -> IssuedSession:
+        if not await self._store.registration_open():
+            raise RegistrationClosed("Owner registration is closed.")
         normalized_username = self._validate_username(username)
         validate_password(password)
         user = await self._store.create_owner(
@@ -72,11 +79,17 @@ class AuthService:
         normalized_username = self._validate_username(username)
         if not self._rate_limiter.is_allowed(client_ip, normalized_username):
             raise LoginRateLimited("Too many login attempts.")
+        try:
+            validate_password(password)
+        except InvalidPassword as exc:
+            self._rate_limiter.record_failure(client_ip, normalized_username)
+            raise InvalidCredentials("Invalid username or password.") from exc
         user = await self._store.find_owner_by_username(normalized_username)
-        if user is None or not self._password_hasher.verify(
-            user.password_hash,
-            password,
-        ):
+        password_hash = (
+            user.password_hash if user is not None else self._dummy_password_hash
+        )
+        password_matches = self._password_hasher.verify(password_hash, password)
+        if user is None or not password_matches:
             self._rate_limiter.record_failure(client_ip, normalized_username)
             raise InvalidCredentials("Invalid username or password.")
         self._rate_limiter.clear(client_ip, normalized_username)

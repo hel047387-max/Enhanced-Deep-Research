@@ -14,10 +14,16 @@ NOW = datetime(2026, 9, 27, 3, 0, tzinfo=UTC)
 
 
 class FakeHasher:
+    def __init__(self) -> None:
+        self.hash_calls: list[str] = []
+        self.verify_calls: list[tuple[str, str]] = []
+
     def hash(self, password: str) -> str:
+        self.hash_calls.append(password)
         return f"hash:{password}"
 
     def verify(self, hash_value: str, password: str) -> bool:
+        self.verify_calls.append((hash_value, password))
         return hash_value == f"hash:{password}"
 
 
@@ -26,20 +32,21 @@ async def make_service(tmp_path, *, attempts: int = 5):
     await store.initialize()
     now = [NOW]
     tokens = cycle(["raw-session-token", "csrf-token", "raw-token-2", "csrf-2"])
+    hasher = FakeHasher()
     service = AuthService(
         store,
-        FakeHasher(),
+        hasher,
         LoginRateLimiter(max_attempts=attempts, window_seconds=900, clock=lambda: 0.0),
         session_days=7,
         now=lambda: now[0],
         token_factory=lambda: next(tokens),
     )
-    return service, store, now
+    return service, store, now, hasher
 
 
 @pytest.mark.asyncio
 async def test_register_trims_username_and_never_persists_raw_token(tmp_path) -> None:
-    service, store, _ = await make_service(tmp_path)
+    service, store, _, hasher = await make_service(tmp_path)
 
     issued = await service.register("  owner  ", "long enough password")
 
@@ -51,13 +58,15 @@ async def test_register_trims_username_and_never_persists_raw_token(tmp_path) ->
         )
     assert values == [(service.hash_session_token("raw-session-token"), "csrf-token")]
     assert "raw-session-token" not in repr(values)
+    hash_calls_before_closed_registration = list(hasher.hash_calls)
     with pytest.raises(RegistrationClosed):
-        await service.register("another", "long enough password")
+        await service.register("another", "another password")
+    assert hasher.hash_calls == hash_calls_before_closed_registration
 
 
 @pytest.mark.asyncio
 async def test_login_uses_one_generic_error_and_enforces_failure_limit(tmp_path) -> None:
-    service, _, _ = await make_service(tmp_path)
+    service, _, _, hasher = await make_service(tmp_path)
     await service.register("owner", "correct password")
 
     for username, password in [
@@ -67,6 +76,9 @@ async def test_login_uses_one_generic_error_and_enforces_failure_limit(tmp_path)
         with pytest.raises(InvalidCredentials, match="Invalid username or password"):
             await service.login(username, password, "203.0.113.8")
 
+    assert hasher.verify_calls[0][0] != "hash:correct password"
+    assert hasher.verify_calls[0][1] == "wrong password"
+
     for _ in range(4):
         with pytest.raises(InvalidCredentials):
             await service.login("owner", "wrong password", "203.0.113.8")
@@ -75,8 +87,22 @@ async def test_login_uses_one_generic_error_and_enforces_failure_limit(tmp_path)
 
 
 @pytest.mark.asyncio
+async def test_login_rejects_oversized_password_before_argon_verification(tmp_path) -> None:
+    service, _, _, hasher = await make_service(tmp_path, attempts=1)
+    await service.register("owner", "correct password")
+    hasher.verify_calls.clear()
+
+    with pytest.raises(InvalidCredentials):
+        await service.login("owner", "x" * 129, "198.51.100.2")
+
+    assert hasher.verify_calls == []
+    with pytest.raises(LoginRateLimited):
+        await service.login("owner", "correct password", "198.51.100.2")
+
+
+@pytest.mark.asyncio
 async def test_successful_login_clears_failures_and_logout_revokes_session(tmp_path) -> None:
-    service, _, _ = await make_service(tmp_path, attempts=2)
+    service, _, _, _ = await make_service(tmp_path, attempts=2)
     await service.register("owner", "correct password")
     with pytest.raises(InvalidCredentials):
         await service.login("owner", "wrong password", "198.51.100.1")
@@ -90,7 +116,7 @@ async def test_successful_login_clears_failures_and_logout_revokes_session(tmp_p
 
 @pytest.mark.asyncio
 async def test_expiry_and_password_reset_revoke_sessions(tmp_path) -> None:
-    service, store, now = await make_service(tmp_path)
+    service, store, now, _ = await make_service(tmp_path)
     first = await service.register("owner", "correct password")
     second = await service.login("owner", "correct password", "192.0.2.1")
 

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, status
+from pydantic import BaseModel
 
 from deep_research.auth.dependencies import (
     authenticate_request,
@@ -15,11 +15,6 @@ from deep_research.auth.passwords import InvalidPassword
 from deep_research.auth.service import AuthService, InvalidCredentials, LoginRateLimited
 from deep_research.config import Settings
 from deep_research.persistence.auth_store import RegistrationClosed
-
-
-class AuthCredentials(BaseModel):
-    username: str = Field(min_length=1, max_length=64)
-    password: str = Field(min_length=1, max_length=128)
 
 
 class AuthStatusResponse(BaseModel):
@@ -35,6 +30,22 @@ class AuthSessionResponse(BaseModel):
 
 
 router = APIRouter(prefix="/api/v1/auth")
+
+def _parse_credentials(body: object) -> tuple[str, str]:
+    if not isinstance(body, dict):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Username and password must be strings.",
+        )
+    username = body.get("username")
+    password = body.get("password")
+    if not isinstance(username, str) or not isinstance(password, str):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Username and password must be strings.",
+        )
+    return username, password
+
 
 
 def _settings(request: Request) -> Settings:
@@ -84,21 +95,22 @@ async def auth_status(
     status_code=status.HTTP_201_CREATED,
 )
 async def register_owner(
-    body: AuthCredentials,
+    body: Annotated[object, Body()],
     request: Request,
     response: Response,
     service: Annotated[AuthService, Depends(get_auth_service)],
 ) -> AuthSessionResponse:
+    username, password = _parse_credentials(body)
     try:
-        issued = await service.register(body.username, body.password)
+        issued = await service.register(username, password)
     except RegistrationClosed as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Owner registration is closed.",
         ) from exc
-    except InvalidPassword as exc:
+    except (InvalidPassword, ValueError) as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
     _set_session_cookie(response, issued, _settings(request))
@@ -107,14 +119,15 @@ async def register_owner(
 
 @router.post("/login", response_model=AuthSessionResponse)
 async def login_owner(
-    body: AuthCredentials,
+    body: Annotated[object, Body()],
     request: Request,
     response: Response,
     service: Annotated[AuthService, Depends(get_auth_service)],
 ) -> AuthSessionResponse:
+    username, password = _parse_credentials(body)
     client_ip = request.client.host if request.client is not None else "unknown"
     try:
-        issued = await service.login(body.username, body.password, client_ip)
+        issued = await service.login(username, password, client_ip)
     except (InvalidCredentials, ValueError) as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

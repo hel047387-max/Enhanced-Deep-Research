@@ -32,9 +32,22 @@ export const pwaOptions: Partial<VitePWAOptions> = {
       "pwa-512x512.png",
       "maskable-icon-512x512.png",
     ],
-    navigateFallback: "/offline.html",
-    navigateFallbackDenylist: [/^\/api\//, /^\/health$/],
-    runtimeCaching: [],
+    navigateFallback: null,
+    runtimeCaching: [
+      {
+        urlPattern: ({ request, url }) =>
+          request.mode === "navigate" &&
+          url.pathname !== "/api" &&
+          !url.pathname.startsWith("/api/") &&
+          url.pathname !== "/health",
+        handler: "NetworkOnly",
+        options: {
+          precacheFallback: {
+            fallbackURL: "/offline.html",
+          },
+        },
+      },
+    ],
   },
 };
 

@@ -32,13 +32,26 @@ describe("PWA configuration", () => {
     ]));
   });
 
-  it("keeps API and health requests out of runtime caching", () => {
-    expect(pwaOptions.workbox).toMatchObject({
-      navigateFallback: "/offline.html",
-      runtimeCaching: [],
+  it("uses the offline page only when a navigation request fails", () => {
+    expect(pwaOptions.workbox?.navigateFallback).toBeNull();
+    const rules = pwaOptions.workbox?.runtimeCaching ?? [];
+    expect(rules).toHaveLength(1);
+    expect(rules[0]).toMatchObject({
+      handler: "NetworkOnly",
+      options: { precacheFallback: { fallbackURL: "/offline.html" } },
     });
-    const denylist = pwaOptions.workbox?.navigateFallbackDenylist ?? [];
-    expect(denylist.some((pattern) => pattern.test("/api/v1/research/stream"))).toBe(true);
-    expect(denylist.some((pattern) => pattern.test("/health"))).toBe(true);
+    const matches = rules[0].urlPattern as (context: {
+      request: { mode: string };
+      url: URL;
+    }) => boolean;
+    const context = (pathname: string, mode = "navigate") => ({
+      request: { mode },
+      url: new URL(pathname, "https://research.example"),
+    });
+    expect(matches(context("/research"))).toBe(true);
+    expect(matches(context("/research", "cors"))).toBe(false);
+    expect(matches(context("/api"))).toBe(false);
+    expect(matches(context("/api/v1/auth/status"))).toBe(false);
+    expect(matches(context("/health"))).toBe(false);
   });
 });
