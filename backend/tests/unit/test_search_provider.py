@@ -69,7 +69,7 @@ class _Probe(BaseModel):
 
 
 @pytest.mark.asyncio
-async def test_deepseek_structured_model_disables_thinking_and_repairs_parse_once(
+async def test_deepseek_structured_model_uses_json_mode_and_repairs_parse_once(
     monkeypatch,
 ) -> None:
     responses = [
@@ -89,12 +89,14 @@ async def test_deepseek_structured_model_disables_thinking_and_repairs_parse_onc
 
     class FakeChatOpenAI:
         kwargs = None
+        structured_schema = None
         structured_kwargs = None
 
         def __init__(self, **kwargs) -> None:
             type(self).kwargs = kwargs
 
         def with_structured_output(self, schema, **kwargs):
+            type(self).structured_schema = schema
             type(self).structured_kwargs = kwargs
             return runnable
 
@@ -115,13 +117,15 @@ async def test_deepseek_structured_model_disables_thinking_and_repairs_parse_onc
 
     assert result == {"ok": True}
     assert len(runnable.calls) == 2
+    assert "Return only JSON matching this JSON Schema" in runnable.calls[0][0].content
     assert "Correct the previous structured output" in runnable.calls[1][-1].content
     assert "invalid output" in runnable.calls[1][-1].content
     assert FakeChatOpenAI.kwargs["temperature"] == 0
     assert FakeChatOpenAI.kwargs["extra_body"] == {
         "thinking": {"type": "disabled"}
     }
+    assert FakeChatOpenAI.structured_schema is _Probe
     assert FakeChatOpenAI.structured_kwargs == {
-        "method": "function_calling",
+        "method": "json_mode",
         "include_raw": True,
     }
