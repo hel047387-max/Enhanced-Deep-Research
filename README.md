@@ -249,7 +249,7 @@ npm run build
 
 ## Reproducible evaluation
 
-The fixed JSON Lines dataset covers 15 technical comparisons, ambiguous inputs, conflicting claims, security, and weak-evidence cases. The current fake runner is a deterministic synthetic metric smoke test: it checks stable dataset/CLI/metric contracts without executing the production graph or measuring provider quality. It reports coverage, task overlap, citation validity, grounding, source diversity, budget, latency, recovery, and transparency fields without network access:
+The fixed JSON Lines dataset contains 50 cases across technical comparison, time-sensitive research, ambiguous input, conflicting sources, weak evidence, security, memory, and literature-RAG categories. Each case records expected behavior, evidence requirements, case-specific rubrics, a search budget, and any local fixture references. The current fake runner is a deterministic synthetic metric smoke test: it checks stable dataset/CLI/metric contracts without executing the production graph or measuring provider quality. It reports coverage, task overlap, citation validity, grounding, source diversity, budget, latency, recovery, and transparency fields without network access. See `backend/evals/README.md` for the dataset contract and intended scoring layers:
 
 ```powershell
 cd backend
@@ -258,7 +258,16 @@ cd backend
 
 The equivalent command starts with `python -m evals.run --mode fake`. Its output records only scripted configuration names, never credentials.
 
-Live evaluation incurs provider cost and is never run by default. The CLI requires an explicit `--live` or `--mode live` request and currently stops unless an application-supplied live runner is provided; this repository does not pretend that offline scores are live-provider results.
+Live evaluation incurs provider cost and is never run by default. It starts the production application lifecycle and requires an explicit case boundary:
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m evals.run --mode live --case-id eval-001 --output "$env:TEMP/deep-research-live-eval.json"
+```
+
+Use repeated `--case-id`, `--limit N`, or `--all`. Live output records real Agent artifacts and deterministic execution metrics; atomic semantic rubrics remain `not_scored` until a separate judge is added.
+
+Checked-in evaluation evidence includes a [50-case offline regression result](backend/evals/results/offline-50.json) and two transparent provider-backed [case studies](docs/evaluation/README.md). The case studies retain Reviewer feedback and budget failures rather than presenting selected outputs as a synthetic overall quality score.
 
 ## Screenshots
 

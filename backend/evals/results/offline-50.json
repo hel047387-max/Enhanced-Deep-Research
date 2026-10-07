@@ -1,0 +1,1321 @@
+{
+  "aggregate_metrics": {
+    "budget_compliance": 1.0,
+    "citation_validity": 1.0,
+    "evidence_grounding": 1.0,
+    "failure_transparency": 1.0,
+    "latency_ms": 0.0,
+    "plan_coverage": 1.0,
+    "recovery_success": 1.0,
+    "source_diversity": 3.0,
+    "task_overlap": 0.0
+  },
+  "cases": [
+    {
+      "case_id": "eval-001",
+      "category": "technical_comparison",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-002",
+      "category": "technical_comparison",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-003",
+      "category": "technical_comparison",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-004",
+      "category": "technical_comparison",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-005",
+      "category": "technical_comparison",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-006",
+      "category": "technical_comparison",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-007",
+      "category": "technical_comparison",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-008",
+      "category": "technical_comparison",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-009",
+      "category": "technical_comparison",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-010",
+      "category": "technical_comparison",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-011",
+      "category": "time_sensitive",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-012",
+      "category": "time_sensitive",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-013",
+      "category": "time_sensitive",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-014",
+      "category": "time_sensitive",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-015",
+      "category": "time_sensitive",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-016",
+      "category": "time_sensitive",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-017",
+      "category": "time_sensitive",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-018",
+      "category": "time_sensitive",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-019",
+      "category": "ambiguous_input",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": true,
+      "status": "completed_after_clarification",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-020",
+      "category": "ambiguous_input",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": true,
+      "status": "completed_after_clarification",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-021",
+      "category": "ambiguous_input",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": true,
+      "status": "completed_after_clarification",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-022",
+      "category": "ambiguous_input",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": true,
+      "status": "completed_after_clarification",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-023",
+      "category": "ambiguous_input",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": true,
+      "status": "completed_after_clarification",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-024",
+      "category": "ambiguous_input",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": true,
+      "status": "completed_after_clarification",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-025",
+      "category": "conflicting_sources",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-026",
+      "category": "conflicting_sources",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-027",
+      "category": "conflicting_sources",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-028",
+      "category": "conflicting_sources",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-029",
+      "category": "conflicting_sources",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-030",
+      "category": "conflicting_sources",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-031",
+      "category": "weak_evidence",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-032",
+      "category": "weak_evidence",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-033",
+      "category": "weak_evidence",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-034",
+      "category": "weak_evidence",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-035",
+      "category": "weak_evidence",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-036",
+      "category": "security",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-037",
+      "category": "security",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-038",
+      "category": "security",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-039",
+      "category": "security",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-040",
+      "category": "security",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-041",
+      "category": "memory",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-042",
+      "category": "memory",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-043",
+      "category": "memory",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-044",
+      "category": "memory",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-045",
+      "category": "memory",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-046",
+      "category": "literature_rag",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-047",
+      "category": "literature_rag",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-048",
+      "category": "literature_rag",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-049",
+      "category": "literature_rag",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    },
+    {
+      "case_id": "eval-050",
+      "category": "literature_rag",
+      "metrics": {
+        "budget_compliance": 1.0,
+        "citation_validity": 1.0,
+        "evidence_grounding": 1.0,
+        "failure_transparency": 1.0,
+        "latency_ms": 0.0,
+        "plan_coverage": 1.0,
+        "recovery_success": 1.0,
+        "source_diversity": 3.0,
+        "task_overlap": 0.0
+      },
+      "requires_clarification": false,
+      "status": "completed",
+      "trace": {
+        "concurrency": 3,
+        "initial_tasks": 3,
+        "queries": 3,
+        "queries_per_round": 1,
+        "reviewer_tasks": 0,
+        "rounds": 1,
+        "supervisor_tasks": 0
+      }
+    }
+  ],
+  "configuration": {
+    "model": "scripted-structured-model-v1",
+    "search": "scripted-search-v1"
+  },
+  "dataset_version": "2026-10-06",
+  "mode": "fake"
+}
